@@ -264,21 +264,17 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (action === "warn") {
       const count = await repo.addWarning(gid, userId, 0, base);
       await repo.addAudit(gid, 0, actorLabel, "warn", targetName, { reason: base, automatic: true, count });
-      // Compact, vertical warning card: only the four requested fields.
+      // One clean RTL warning template; avoid decorative borders and repeated labels.
+      const reasonLabel = violations.includes("word") ? "كلمات مسيئة" : base;
+      const escapeMarkdown = (value: string) => value.replace(/([\\_*\\[\\]()~`>#+=|{}.!-])/g, "\\$1");
+      const safeName = escapeMarkdown(targetName);
+      const safeReason = escapeMarkdown(reasonLabel);
+      const warningMarkdown =
+        `# ⚠️ تحذير المستخدم\n\n` +
+        `👤 **العضو:** [${safeName}](tg://user?id=${userId})\n` +
+        `📌 **السبب:** ${safeReason}\n` +
+        `🔢 **عدد التحذيرات:** **${count}**`;
       try {
-        const safe = (value: string) => value.replace(/[\\*_\\[\\]()~`>#+=|{}.!-]/g, "\\$&");
-        const safeName = safe(targetName);
-        const reasonLabel = violations.includes("word") ? "كلمات مسيئة" : base;
-        const safeReason = safe(reasonLabel);
-        const warningMarkdown =
-          `**╭━━━〔 ⚠️ تَـحْـذِيـر الـمُـسْـتَـخْـدِم 〕━━━╮**\n\n` +
-          `**┃  ➤  👤 الـعُـضْـو**\n` +
-          `┃      ${safeName}\n\n` +
-          `**┃  ➤  📌 الـسَّـبَـب**\n` +
-          `┃      ${safeReason}\n\n` +
-          `**┃  ➤  🔢 عَـدَد الـتَّـحْـذِيـرَات**\n` +
-          `┃      ${count}\n\n` +
-          `**╰━━━━━━━━━━━━━━━━━━╯**`;
         await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
@@ -288,7 +284,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            `╭━━━〔 ⚠️ تـحـذيـر الـمـسـتـخـدِم 〕━━━╮\n\n┃ ➤ 👤 الـعـضـو\n┃  ${targetName}\n\n┃ ➤ 📌 الـسـبـب\n┃  ${violations.includes("word") ? "كلمات مسيئة" : base}\n\n┃ ➤ 🔢 عـدد الـتـحـذيـرات\n┃  ${count}\n\n╰━━━━━━━━━━━━━━━━━━╯`,
+            `⚠️ تحذير المستخدم\n\n👤 العضو: ${targetName}\n📌 السبب: ${reasonLabel}\n🔢 عدد التحذيرات: ${count}`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
