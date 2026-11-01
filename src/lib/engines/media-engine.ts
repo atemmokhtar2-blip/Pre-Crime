@@ -42,7 +42,7 @@ export function inspectMedia(message: TelegramMessage): MediaSignal {
 }
 
 export function shouldDeleteImage(message: TelegramMessage): boolean {
-  if (!message.photo) return false;
-  const accompanyingText = (message.caption ?? message.text ?? "").trim();
-  return accompanyingText.length === 0;
+  const signal = inspectMedia(message);
+  // Mixed attachments and captioned photos are never removed by the image-only rule.
+  return signal.kind.length === 1 && signal.kind[0] === "photo" && !signal.hasCaption;
 }
