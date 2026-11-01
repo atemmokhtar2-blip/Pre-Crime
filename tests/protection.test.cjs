@@ -155,3 +155,32 @@ test("recognizes Telegram video notes and paid media as media attachments", () =
   assert.equal(extractSignal({ message_id: 9, chat: { id: -1001, type: "supergroup" }, paid_media: {} }).hasMedia, true);
   assert.equal(extractSignal({ message_id: 10, chat: { id: -1001, type: "supergroup" }, document: {} }).hasDocument, true);
 });
+
+const { shouldDeleteImage, inspectMedia } = require("../.test-build/engines/media-engine.js");
+const { inspectFile } = require("../.test-build/engines/file-engine.js");
+
+test("media engine classifies attachments independently", () => {
+  const signal = inspectMedia({ message_id: 20, chat: { id: -1001, type: "supergroup" }, photo: [{}], caption: "صورة" });
+  assert.equal(signal.hasPhoto, true);
+  assert.equal(signal.hasCaption, true);
+  assert.deepEqual(signal.kind, ["photo"]);
+});
+
+test("image filter never deletes captioned photos or mixed media", () => {
+  const chat = { id: -1001, type: "supergroup" };
+  assert.equal(shouldDeleteImage({ message_id: 21, chat, photo: [{}], caption: "وصف الصورة" }), false);
+  assert.equal(shouldDeleteImage({ message_id: 22, chat, photo: [{}], video: {} }), false);
+  assert.equal(shouldDeleteImage({ message_id: 23, chat, video: {} }), false);
+});
+
+test("image filter only removes a standalone photo with no caption", () => {
+  assert.equal(shouldDeleteImage({ message_id: 24, chat: { id: -1001, type: "supergroup" }, photo: [{}] }), true);
+});
+
+test("file engine reads document metadata without classifying it as media", () => {
+  const message = { message_id: 25, chat: { id: -1001, type: "supergroup" }, document: { file_name: "report.pdf", mime_type: "application/pdf", file_size: 1200 } };
+  assert.equal(inspectFile(message).hasFile, true);
+  assert.equal(inspectFile(message).fileName, "report.pdf");
+  assert.equal(extractSignal(message).hasDocument, true);
+  assert.equal(extractSignal(message).hasMedia, false);
+});
