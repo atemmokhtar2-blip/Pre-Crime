@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import { evaluateBotPermissions } from "../../../../lib/onboarding";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,11 +11,18 @@ type TelegramUpdate = {
     text?: string;
     chat?: { id?: number; type?: string; title?: string };
     from?: { first_name?: string };
+    message_id?: number;
   };
   my_chat_member?: {
     chat?: { id?: number; type?: string; title?: string };
     old_chat_member?: { status?: string };
-    new_chat_member?: { status?: string; user?: { is_bot?: boolean } };
+    new_chat_member?: { status?: string; user?: { id?: number; is_bot?: boolean } };
+  };
+  callback_query?: {
+    id: string;
+    data?: string;
+    from: { id: number };
+    message?: { message_id: number; chat: { id: number; type: string } };
   };
   [key: string]: unknown;
 };
@@ -39,6 +47,87 @@ async function telegram<T>(token: string, method: string, body?: object): Promis
     throw new Error(`telegram_${method}_failed`);
   }
   return result.result;
+}
+
+
+async function handleCallback(token: string, callback: NonNullable<TelegramUpdate["callback_query"]>) {
+  const message = callback.message;
+  const data = callback.data ?? "";
+  if (!message) {
+    await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "افتح البوت من جديد وجرب مرة أخرى." });
+    return;
+  }
+
+  const edit = async (text: string, inline_keyboard: object[][]) =>
+    telegram(token, "editMessageText", {
+      chat_id: message.chat.id,
+      message_id: message.message_id,
+      text,
+      reply_markup: { inline_keyboard },
+      disable_web_page_preview: true,
+    });
+
+  if (data === "pc:guide") {
+    await edit(
+      "📘 طريقة تفعيل PRE-CRIME\\n\\n1) أضف البوت إلى مجموعتك.\\n2) ارفعه إلى مشرف.\\n3) فعّل صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين.\\n4) اضغط «فحص الجاهزية» للتأكد من الصلاحيات.\\n\\nملاحظة: ميزات الحماية المتقدمة ستظهر بعد تفعيلها في مراحل التطوير التالية.",
+      [[{ text: "🔎 فحص الجاهزية", callback_data: "pc:check" }], [{ text: "↩️ رجوع", callback_data: "pc:home" }]],
+    );
+    await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id });
+    return;
+  }
+
+  if (data === "pc:home") {
+    const me = await telegram<{ username?: string }>(token, "getMe");
+    const keyboard: object[][] = [
+      [{ text: "➕ إضافة البوت إلى مجموعة", url: `https://t.me/${me.username}?startgroup=true` }],
+      [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }],
+    ];
+    await edit(
+      "🛡️ PRE-CRIME\\n\\nمساعدك لإدارة وحماية مجموعات تيليجرام.\\nأضفني إلى مجموعتك، ثم اتبع خطوات التفعيل وفحص الصلاحيات.",
+      keyboard,
+    );
+    await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id });
+    return;
+  }
+
+  if (data === "pc:check") {
+    if (message.chat.type !== "group" && message.chat.type !== "supergroup") {
+      await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "فحص الجاهزية متاح من داخل المجموعة.", show_alert: true });
+      return;
+    }
+    const actor = await telegram<{ status: string }>(token, "getChatMember", {
+      chat_id: message.chat.id,
+      user_id: callback.from.id,
+    });
+    if (actor.status !== "creator" && actor.status !== "administrator") {
+      await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "الفحص متاح لمشرفي المجموعة فقط.", show_alert: true });
+      return;
+    }
+
+    const me = await telegram<{ id: number }>(token, "getMe");
+    const botMember = await telegram<{
+      status: string;
+      can_delete_messages?: boolean;
+      can_restrict_members?: boolean;
+      can_invite_users?: boolean;
+    }>(token, "getChatMember", { chat_id: message.chat.id, user_id: me.id });
+
+    const { isAdmin, missing, ready } = evaluateBotPermissions(botMember);
+    const report = ready
+      ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\\n\\nملاحظة: ده فحص للصلاحيات فقط، وليس تأكيدًا لتفعيل كل أنظمة الحماية المتقدمة."
+      : "⚠️ البوت غير جاهز بالكامل.\\n" +
+        (!isAdmin ? "• ارفع PRE-CRIME إلى مشرف.\\n" : "") +
+        (missing.length ? "• فعّل الصلاحيات التالية: " + missing.join("، ") + ".\\n" : "") +
+        "\\nبعد تعديل الصلاحيات أعد الفحص.";
+    await edit(
+      "🛡️ تقرير جاهزية PRE-CRIME\\n\\n" + report,
+      [[{ text: "🔄 إعادة الفحص", callback_data: "pc:check" }], [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }]],
+    );
+    await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: ready ? "الفحص اكتمل: الصلاحيات الأساسية متاحة." : "تم الفحص: البوت يحتاج إلى استكمال الإعدادات." });
+    return;
+  }
+
+  await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "الزر غير معروف. افتح /start من جديد." });
 }
 
 export async function POST(request: Request) {
@@ -82,7 +171,7 @@ export async function POST(request: Request) {
       )
     `;
     const updateType = Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
-    const chatId = update.message?.chat?.id ?? update.my_chat_member?.chat?.id ?? null;
+    const chatId = update.message?.chat?.id ?? update.my_chat_member?.chat?.id ?? update.callback_query?.message?.chat?.id ?? null;
 
     // A failed delivery can be retried; successful updates remain idempotent.
     const claimed = await sql`
@@ -99,6 +188,10 @@ export async function POST(request: Request) {
     }
 
     try {
+      if (update.callback_query) {
+        await handleCallback(token, update.callback_query);
+      }
+
       const text = update.message?.text?.trim() ?? "";
       if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text) && update.message?.chat?.id) {
         const me = await telegram<{ username?: string }>(token, "getMe");
@@ -114,10 +207,10 @@ export async function POST(request: Request) {
           chat_id: update.message.chat.id,
           text: message,
           reply_markup: {
-            inline_keyboard: [[{
-              text: "➕ إضافة البوت إلى مجموعة",
-              url: `https://t.me/${me.username}?startgroup=true`,
-            }]],
+            inline_keyboard: [
+              [{ text: "➕ إضافة البوت إلى مجموعة", url: `https://t.me/${me.username}?startgroup=true` }],
+              [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }],
+            ],
           },
           disable_web_page_preview: true,
         });
@@ -148,7 +241,8 @@ export async function POST(request: Request) {
           text:
             groupGreeting +
             "أنا PRE-CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\n" +
-            "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء وإدارة المجموعة، وبعدها هأكد لكم إنّي جاهز للعمل.",
+            "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين، ثم افحصوا جاهزيتي من الزر بالأسفل.",
+          reply_markup: { inline_keyboard: [[{ text: "🔎 فحص جاهزية الحماية", callback_data: "pc:check" }], [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }]] },
           disable_web_page_preview: true,
         });
       }
