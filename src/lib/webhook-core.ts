@@ -31,7 +31,7 @@ import {
 import { toggleByKey, findToggle } from "./toggles";
 import { defaultSettings, resetSection, type ResetSectionKey } from "./settings";
 import { resolveRole, canOpenPanel, buildPermissionChecks, type PermissionChecks } from "./permissions";
-import { evaluateProtection, extractSignal, VIOLATION_LABELS, type RecentEvent, type ViolationKind } from "./protection";
+import { evaluateProtection, extractSignal, VIOLATION_LABELS, type ViolationKind } from "./protection";
 import { buildGoodbyeMessage, buildWelcomeMessage, memberLabel } from "./messages";
 import { BRAND, DEFAULT_REASON } from "./constants";
 import type {
@@ -58,26 +58,9 @@ export interface WebhookResult {
   processed?: boolean;
 }
 
-const RECENT_LIMIT = 60;
-
 export function createWebhookHandler(deps: WebhookDeps) {
   const { repo, bot } = deps;
   const now = deps.now ?? (() => Date.now());
-  const recent = new Map<string, RecentEvent[]>();
-
-  function recentEvents(key: string, windowMs: number): RecentEvent[] {
-    const t = now();
-    const kept = (recent.get(key) ?? []).filter((e) => t - e.at <= windowMs);
-    recent.set(key, kept);
-    return kept;
-  }
-
-  function recordEvent(key: string, text: string): void {
-    const t = now();
-    const list = recent.get(key) ?? [];
-    list.push({ at: t, text });
-    recent.set(key, list.slice(-RECENT_LIMIT));
-  }
 
   async function sendSafe(chatId: number, text: string, keyboard?: InlineKeyboardButton[][]): Promise<void> {
     try {
@@ -254,7 +237,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
   // ---------- message handling (protection + member tracking + events) ----------
 
-  async function handleGroupMessage(message: TelegramMessage): Promise<void> {
+  async function handleGroupMessage(message: TelegramMessage, updateId: number): Promise<void> {
     const chat = message.chat;
     const gid = chat.id;
     await ensureGroup(gid, chat.title, chat.type);
@@ -348,11 +331,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
       return;
     }
 
-    const key = `${gid}:${userId}`;
     const windowMs = Math.max(settings.protection.antiFlood.windowSeconds, settings.protection.antiSpam.windowSeconds, 1) * 1000;
-    const recents = recentEvents(key, windowMs);
-    const violations = evaluateProtection(settings.protection, signal, recents, now());
-    recordEvent(key, signal.text);
+    const eventTime = now();
+    const recents = await repo.recordMessageEvent(gid, userId, updateId, signal.text, eventTime, windowMs);
+    const violations = evaluateProtection(settings.protection, signal, recents, eventTime);
 
     if (violations.length > 0) {
       // Check administrator status before deleting: admins must be exempt from both.
@@ -1204,7 +1186,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
           return { ok: true, processed: false };
         }
         if (update.message.chat.type === "group" || update.message.chat.type === "supergroup") {
-          await handleGroupMessage(update.message);
+          await handleGroupMessage(update.message, update.update_id);
           return { ok: true, processed: true };
         }
         return { ok: true, processed: false };
