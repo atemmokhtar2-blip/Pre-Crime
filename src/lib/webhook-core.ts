@@ -28,7 +28,7 @@ import {
   formatDateTime,
   type GroupStats,
 } from "./screens";
-import { toggleByKey } from "./toggles";
+import { toggleByKey, findToggle } from "./toggles";
 import { defaultSettings, resetSection, type ResetSectionKey } from "./settings";
 import { resolveRole, canOpenPanel, buildPermissionChecks, type PermissionChecks } from "./permissions";
 import { evaluateProtection, extractSignal, VIOLATION_LABELS, type RecentEvent, type ViolationKind } from "./protection";
@@ -587,7 +587,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       case "toggle": {
         const key = parsed.args[0];
-        if (!key) { await ack(update.id, "الزر غير معروف.", true); return; }
+        if (!key || !findToggle(key)) { await ack(update.id, "الإعداد غير معروف.", true); return; }
         if (!mayToggle(key, checks)) { await ack(update.id, "غير مصرح لك بتغيير هذا الإعداد.", true); return; }
         const next = toggleByKey(settings, key);
         await repo.setSettings(gid, next);
@@ -775,7 +775,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const target = parsed.args[0];
         if (target === "media") settings.messages.contentFilter.media = !settings.messages.contentFilter.media;
         else if (target === "files") settings.messages.contentFilter.files = !settings.messages.contentFilter.files;
-        else settings.messages.contentFilter.text = !settings.messages.contentFilter.text;
+        else { await ack(update.id, "هذا الفلتر غير متاح حاليًا.", true); return; }
         await repo.setSettings(gid, settings);
         await editScreen(chatId, messageId, screenMessagesSettings(settings, gid));
         await ack(update.id, "تم الحفظ ✅");
