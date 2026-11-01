@@ -8,8 +8,13 @@ type TelegramUpdate = {
   update_id?: number;
   message?: {
     text?: string;
-    chat?: { id?: number; type?: string };
+    chat?: { id?: number; type?: string; title?: string };
     from?: { first_name?: string };
+  };
+  my_chat_member?: {
+    chat?: { id?: number; type?: string; title?: string };
+    old_chat_member?: { status?: string };
+    new_chat_member?: { status?: string; user?: { is_bot?: boolean } };
   };
   [key: string]: unknown;
 };
@@ -76,20 +81,8 @@ export async function POST(request: Request) {
         error_code TEXT
       )
     `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS telegram_updates (
-        update_id BIGINT PRIMARY KEY,
-        update_type TEXT NOT NULL,
-        chat_id BIGINT,
-        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        processed_at TIMESTAMPTZ,
-        status TEXT NOT NULL DEFAULT 'received'
-          CHECK (status IN ('received','processing','processed','failed')),
-        error_code TEXT
-      )
-    `;
     const updateType = Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
-    const chatId = update.message?.chat?.id ?? null;
+    const chatId = update.message?.chat?.id ?? update.my_chat_member?.chat?.id ?? null;
 
     // A failed delivery can be retried; successful updates remain idempotent.
     const claimed = await sql`
@@ -126,6 +119,30 @@ export async function POST(request: Request) {
               url: `https://t.me/${me.username}?startgroup=true`,
             }]],
           },
+          disable_web_page_preview: true,
+        });
+      }
+
+      const membership = update.my_chat_member;
+      const newStatus = membership?.new_chat_member?.status;
+      const oldStatus = membership?.old_chat_member?.status;
+      const addedToGroup =
+        membership?.chat?.id &&
+        (membership.chat.type === "group" || membership.chat.type === "supergroup") &&
+        (newStatus === "member" || newStatus === "administrator") &&
+        (oldStatus === "left" || oldStatus === "kicked");
+
+      if (addedToGroup && membership?.chat?.id) {
+        const groupName = membership.chat.title?.trim();
+        const groupGreeting = groupName
+          ? `أهلاً بأعضاء مجموعة ${groupName} 👋\\n\\n`
+          : "أهلاً يا جماعة 👋\\n\\n";
+        await telegram(token, "sendMessage", {
+          chat_id: membership.chat.id,
+          text:
+            groupGreeting +
+            "تمت إضافتي للمجموعة بنجاح 🤖\\n" +
+            "علشان أبدأ إدارة وحماية المجموعة، ارفعني مشرف وفعّل الصلاحيات المطلوبة، خصوصًا حذف الرسائل وحظر المستخدمين وإدارة الأعضاء.",
           disable_web_page_preview: true,
         });
       }
