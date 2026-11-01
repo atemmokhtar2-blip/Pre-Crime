@@ -74,7 +74,7 @@ function foldLatinArabizi(value: string): string {
 }
 
 function squeezeRepeats(value: string): string {
-  return value.replace(/(.)\1{2,}/gu, "$1$1");
+  return value.replace(/(.)\1+/gu, "$1");
 }
 
 function normalizeForMatch(value: string): string {
