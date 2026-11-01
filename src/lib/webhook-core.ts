@@ -245,24 +245,24 @@ export function createWebhookHandler(deps: WebhookDeps) {
       await repo.addAudit(gid, 0, actorLabel, "warn", targetName, { reason: base, automatic: true, count });
       // Native Telegram rich warning card with a direct entry point to the bot.
       try {
-        const safe = (value: string) => value.replace(/[\\*_\\[\\]()~\`>#+=|{}.!-]/g, "\\$&");
+        const safe = (value: string) => value.replace(/[\\*_\\[\\]()~`>#+=|{}.!-]/g, "\\$&");
         const safeName = safe(targetName);
         const safeReason = safe(base);
         const botInfo = await bot.getMe().catch(() => null);
         const keyboard: InlineKeyboardButton[][] = botInfo?.username
-          ? [[{ text: "🤖 افتح PRE-CRIME", url: \`https://t.me/\${botInfo.username}\`, style: "primary" }]]
+          ? [[{ text: "🤖 افتح PRE-CRIME", url: `https://t.me/${botInfo.username}`, style: "primary" }]]
           : [];
         const warningMarkdown =
-          \`# ⚠️ تنبيه إداري\n\n\` +
-          \`**⌯︙ تحذير للمستخدم**\n\` +
-          \`**👤 العضو:** \${safeName}\n\` +
-          \`**📌 السبب:** \${safeReason}\n\` +
-          \`**🔢 عدد التحذيرات:** \${count}\n\n\` +
-          \`━━━━━━━━━━━━━━━━━━\n\` +
+          `# ⚠️ تنبيه إداري\n\n` +
+          `**⌯︙ تحذير للمستخدم**\n` +
+          `**👤 العضو:** ${safeName}\n` +
+          `**📌 السبب:** ${safeReason}\n` +
+          `**🔢 عدد التحذيرات:** ${count}\n\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
           (count >= settings.protection.punishment.warningsBeforeAction && settings.protection.punishment.warningsBeforeAction > 0
-            ? \`⛔ **تم الوصول إلى حد التحذيرات.**\n\`
-            : \`⌁ يرجى الالتزام بقواعد المجموعة لتجنب الإجراء التالي.\n\`) +
-          \`\n**PRE-CRIME**  ⌯︙ نظام حماية المجموعة\`;
+            ? `⛔ **تم الوصول إلى حد التحذيرات.**\n`
+            : `⌁ يرجى الالتزام بقواعد المجموعة لتجنب الإجراء التالي.\n`) +
+          `\n**PRE-CRIME**  ⌯︙ نظام حماية المجموعة`;
         await bot.sendRichMessage(gid, warningMarkdown, keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
@@ -272,7 +272,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            \`⚠️ ︙ تـنـبـيـه إداري\n━━━━━━━━━━━━━━━━━━\n⌯︙ العضو: \${targetName}\n⌯︙ السبب: \${base}\n⌯︙ عدد التحذيرات: \${count}\n━━━━━━━━━━━━━━━━━━\nPRE-CRIME • نظام حماية المجموعة\`,
+            `⚠️ ︙ تـنـبـيـه إداري\n━━━━━━━━━━━━━━━━━━\n⌯︙ العضو: ${targetName}\n⌯︙ السبب: ${base}\n⌯︙ عدد التحذيرات: ${count}\n━━━━━━━━━━━━━━━━━━\nPRE-CRIME • نظام حماية المجموعة`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
