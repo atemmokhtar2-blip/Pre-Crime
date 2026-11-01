@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   try {
     const sql = neon(databaseUrl);
-    await sql\`
+    await sql`
       CREATE TABLE IF NOT EXISTS telegram_updates (
         update_id BIGINT PRIMARY KEY,
         update_type TEXT NOT NULL,
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
           CHECK (status IN ('received','processing','processed','failed')),
         error_code TEXT
       )
-    \`;
+    `;
     await sql`
       CREATE TABLE IF NOT EXISTS telegram_updates (
         update_id BIGINT PRIMARY KEY,
