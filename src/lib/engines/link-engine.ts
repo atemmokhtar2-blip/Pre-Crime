@@ -1,4 +1,4 @@
-import type { TelegramMessage } from "./types";
+import type { TelegramMessage } from "../types";
 
 export type LinkSignal = { text: string; hasUrl: boolean; links: string[]; };
 
