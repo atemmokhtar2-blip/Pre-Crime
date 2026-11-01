@@ -71,40 +71,47 @@ export function createWebhookHandler(deps: WebhookDeps) {
   }
 
   function richLayout(text: string): string {
-    const lines = text.split("\\n");
-    const first = lines.shift()?.trim() ?? "";
-    const output: string[] = [`# ${first}`, ""];
-    let tableRows: string[] = [];
-    const flushTable = () => {
-      if (tableRows.length) {
-        output.push("| البيان | التفاصيل |", "|:--|:--|", ...tableRows, "");
-        tableRows = [];
-      }
-    };
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) { flushTable(); output.push(""); continue; }
-      if (/^[━─—-]{3,}$/.test(trimmed)) { flushTable(); output.push("---", ""); continue; }
-      if (trimmed.startsWith("• ")) { flushTable(); output.push("- " + trimmed.slice(2)); continue; }
-      const pair = trimmed.match(/^([^:]{2,50}):\\s*(.+)$/);
-      if (pair) {
-        const clean = (value: string) => value.replace(/\\|/g, "\\\\|");
-        tableRows.push(`| ${clean(pair[1])} | ${clean(pair[2])} |`);
+    // Screen copy is authored with real newline characters. Never split on the
+    // two-character sequence "\\n" or it leaks visibly into Telegram.
+    const lines = text.replace(/\\r\\n?/g, "\\n").split("\\n");
+    const first = (lines.shift() ?? "").trim();
+    const output: string[] = first ? [`# ${first}`, ""] : [];
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        if (output[output.length - 1] !== "") output.push("");
         continue;
       }
-      flushTable();
-      if (/^(?:📊|🛡️|👥|💬|⚠️|🔔|📨|🔗|🔤|📝|⚙️|🌐)\\s/.test(trimmed)) {
-        output.push(`## ${trimmed}`);
-      } else {
-        output.push(line);
+      if (/^[━─—-]{3,}$/.test(line)) {
+        if (output[output.length - 1] !== "") output.push("");
+        output.push("---", "");
+        continue;
       }
+      if (/^•\\s+/.test(line)) {
+        output.push("- " + line.replace(/^•\\s+/, ""));
+        continue;
+      }
+      if (/^(?:📊|🛡️|👥|💬|⚠️|🔔|📨|🔗|🔤|📝|⚙️|🌐|🚫|📋|👮|🤖)\\s/.test(line)) {
+        output.push(`## ${line}`);
+        continue;
+      }
+      output.push(rawLine);
     }
-    flushTable();
     return output.join("\\n").replace(/\\n{3,}/g, "\\n\\n").trim();
   }
 
+  function styledKeyboard(keyboard: InlineKeyboardButton[][]): InlineKeyboardButton[][] {
+    return keyboard.map((row) => row.map((button) => {
+      if (button.style) return button;
+      const label = button.text;
+      const danger = /حظر|حذف|طرد|إزالة|إعادة ضبط|مسح|إلغاء تفعيل/.test(label);
+      const success = /مفعّل|تشغيل|تفعيل|إضافة البوت|تأكيد|نعم، تنفيذ/.test(label);
+      return { ...button, style: danger ? "danger" as const : success ? "success" as const : "primary" as const };
+    }));
+  }
+
   async function sendRichScreen(chatId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
-    const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
+    const keyboard = styledKeyboard(screen.keyboard);\n    const markup = keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined;
     try {
       await bot.sendRichMessage(chatId, richLayout(screen.text), markup);
     } catch (error) {
@@ -117,7 +124,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
     try {
       await bot.editMessageText(chatId, messageId, undefined, {
-        rich_message: { markdown: richLayout(screen.text) },
+        rich_message: { markdown: richLayout(screen.text), is_rtl: true },
         ...(markup ?? {}),
       });
     } catch (error) {
