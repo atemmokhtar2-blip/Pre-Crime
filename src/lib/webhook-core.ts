@@ -70,6 +70,18 @@ export function createWebhookHandler(deps: WebhookDeps) {
     }
   }
 
+  async function sendGroupNotice(chatId: number, text: string, keyboard?: InlineKeyboardButton[][]): Promise<void> {
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim()).filter(Boolean);
+    const markdown = lines.map((line, index) => index === 0 ? "**⌯︙ " + line + "**" : "↳ " + line).join("\n\n");
+    const markup = keyboard?.length ? { reply_markup: { inline_keyboard: styledKeyboard(keyboard) } } : undefined;
+    try {
+      await bot.sendRichMessage(chatId, markdown, markup);
+    } catch (error) {
+      console.error("telegram_group_notice_rich_fallback", { chatId, error: error instanceof Error ? error.message : String(error) });
+      const plain = lines.map((line, index) => index === 0 ? "⌯︙ " + line : "↳ " + line).join("\n");
+      await bot.sendMessage(chatId, plain, markup);
+    }
+  }
   function richLayout(text: string): string {
     // Normalize real line breaks before converting plain screen copy to Rich Markdown.
     const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -224,7 +236,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       const rule = settings.notifications[ruleKey];
       if (!rule?.enabled) return;
       if (rule.target === "group") {
-        await sendSafe(gid, text);
+        await sendGroupNotice(gid, text);
         return;
       }
       const owners = await groupOwners(gid);
@@ -251,9 +263,9 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const safeReason = safe(reasonLabel);
         const warningMarkdown =
           `**⌯︙ تحذير المستخدم**\n\n` +
-          `**👤 العضو**\n${safeName}\n\n` +
-          `**📌 السبب**\n${safeReason}\n\n` +
-          `**🔢 عدد التحذيرات**\n${count}`;
+          `↳ **👤 العضو**\n${safeName}\n\n` +
+          `↳ **📌 السبب**\n${safeReason}\n\n` +
+          `↳ **🔢 عدد التحذيرات**\n${count}`;
         await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
@@ -360,7 +372,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         await repo.addAudit(gid, from.id, name, "member_joined", label, {});
         if (settings.members.welcomeEnabled) {
           const welcome = buildWelcomeMessage(settings.messages.welcomeText, chat.title ?? "المجموعة", label, member.username ?? null);
-          await sendSafe(gid, welcome);
+          await sendGroupNotice(gid, welcome);
         }
         await deliverNotification(gid, "memberJoined", `👋 انضم ${label} إلى المجموعة.`);
       }
@@ -375,7 +387,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       await repo.addAudit(gid, member.id, label, "member_left", label, {});
       const settings = await repo.getSettings(gid);
       if (settings.members.goodbyeEnabled) {
-        await sendSafe(gid, buildGoodbyeMessage(settings.messages.goodbyeText, chat.title ?? "المجموعة", label));
+        await sendGroupNotice(gid, buildGoodbyeMessage(settings.messages.goodbyeText, chat.title ?? "المجموعة", label));
       }
       await deliverNotification(gid, "memberLeft", `👋 غادر ${label} المجموعة.`);
       return;
@@ -1124,7 +1136,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       await repo.addAudit(chat.id, adder?.id ?? null, adder?.username ?? adder?.first_name ?? null, "member_joined", "PRE CRIME", { promoted });
 
       // Group greeting
-      await sendSafe(chat.id, `أهلاً بأعضاء مجموعة ${chat.title ?? ""} 👋\n\nأنا PRE CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\nتمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين، ثم افتحوا لوحة التحكم من الخاص.`, [
+      await sendGroupNotice(chat.id, `أهلاً بأعضاء مجموعة ${chat.title ?? ""} 👋\n\nأنا PRE CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\nتمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين، ثم افتحوا لوحة التحكم من الخاص.`, [
         [{ text: "🔎 فحص جاهزية الحماية", callback_data: encodeCallback("check", chat.id) }],
       ]);
 
