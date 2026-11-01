@@ -161,10 +161,10 @@ export function screenSettings(gid: number): Screen {
 export function screenGeneral(settings: GroupSettings, botName: string, gid: number): Screen {
   return {
     text:
-      `🌐 ${SECTION_TITLES.general}\\n\\n` +
-      `اسم البوت: ${botName}\\n` +
-      `لغة الواجهة: العربية\\n` +
-      `المنطقة الزمنية: ${settings.general.timezone}\\n\\n` +
+      `🌐 ${SECTION_TITLES.general}\n\n` +
+      `اسم البوت: ${botName}\n` +
+      `لغة الواجهة: العربية\n` +
+      `المنطقة الزمنية: ${settings.general.timezone}\n\n` +
       `إعداد تغيير اللغة غير متاح بعد.`,
     keyboard: [[groupBack(gid)]],
   };
