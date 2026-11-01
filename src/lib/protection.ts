@@ -2,6 +2,7 @@ import type { ProtectionPolicy, TelegramMessage } from "./types";
 import { inspectLinks } from "./engines/link-engine";
 import { inspectWords } from "./engines/word-engine";
 import { inspectMedia } from "./engines/media-engine";
+import { inspectFile } from "./engines/file-engine";
 
 export type ViolationKind =
   | "spam"
@@ -24,7 +25,8 @@ export function extractSignal(message: TelegramMessage): MessageSignal {
   const linkSignal = inspectLinks(message);
   const hasForward = Boolean(message.forward_origin || message.forward_from || message.forward_from_chat);
   const mediaSignal = inspectMedia(message);
-  return { ...linkSignal, hasForward, hasMedia: mediaSignal.hasMedia, hasDocument: mediaSignal.hasFile };
+  const fileSignal = inspectFile(message);
+  return { ...linkSignal, hasForward, hasMedia: mediaSignal.hasMedia, hasDocument: fileSignal.hasFile };
 }
 
 // Pure policy evaluation: given the current signal and recent events for a user,
