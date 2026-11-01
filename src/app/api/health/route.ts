@@ -67,7 +67,7 @@ export async function GET() {
         await telegramCall(botToken, "setWebhook", {
           url: webhookUrl,
           secret_token: webhookSecret,
-          allowed_updates: ["message"],
+          allowed_updates: ["message", "my_chat_member"],
           drop_pending_updates: false,
         });
         const info = await telegramCall(botToken, "getWebhookInfo");
