@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 type Check = "ok" | "missing" | "failed" | "schema_missing";
 
 export async function GET() {
+  let webhookDiagnostics: { allowed_updates?: string[]; pending_update_count?: number; last_error_message?: string; last_error_date?: number } | null = null;
   const checks: Record<string, Check> = {
     app: "ok",
     database: "missing",
@@ -66,6 +67,12 @@ export async function GET() {
           drop_pending_updates: false,
         });
         const info = await telegramCall("getWebhookInfo");
+        webhookDiagnostics = {
+          allowed_updates: Array.isArray(info?.allowed_updates) ? info.allowed_updates : [],
+          pending_update_count: Number(info?.pending_update_count ?? 0),
+          ...(info?.last_error_message ? { last_error_message: String(info.last_error_message) } : {}),
+          ...(info?.last_error_date ? { last_error_date: Number(info.last_error_date) } : {}),
+        };
         checks.webhook = info?.url === webhookUrl ? "ok" : "failed";
       } else {
         checks.webhook = "missing";
@@ -77,7 +84,7 @@ export async function GET() {
 
   const ok = Object.values(checks).every((value) => value === "ok");
   return Response.json(
-    { ok, service: "pre-crime", runtime: "vercel-nodejs", checks },
+    { ok, service: "pre-crime", runtime: "vercel-nodejs", checks, diagnostics: { webhook: webhookDiagnostics } },
     { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
 }
