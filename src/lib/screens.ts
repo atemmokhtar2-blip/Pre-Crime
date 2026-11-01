@@ -145,7 +145,7 @@ export function screenPanel(groupTitle: string, gid: number): Screen {
 
 export function screenSettings(gid: number): Screen {
   return {
-    text: `⚙️ ${SECTION_TITLES.settings}\n\nاختر القسم الذي تريد تخصيصه:`,
+    text: `⚙️ مركز الإعدادات\n━━━━━━━━━━━━━━━━━━\nخصص سلوك البوت وطريقة إدارته للمجموعة.\n\nاختر القسم الذي تريد ضبطه:`,
     keyboard: [
       [{ text: "🌐 الإعدادات العامة", callback_data: encodeCallback("general", gid) }],
       [{ text: "🛡️ إعدادات الحماية", callback_data: encodeCallback("protection", gid) }],
@@ -163,11 +163,11 @@ export function screenSettings(gid: number): Screen {
 export function screenGeneral(settings: GroupSettings, botName: string, gid: number): Screen {
   return {
     text:
-      `🌐 ${SECTION_TITLES.general}\n\n` +
-      `اسم البوت: ${botName}\n` +
-      `لغة الواجهة: العربية\n` +
-      `المنطقة الزمنية: ${settings.general.timezone}\n\n` +
-      `إعداد تغيير اللغة غير متاح بعد.`,
+      `🌐 معلومات المجموعة والبوت\n━━━━━━━━━━━━━━━━━━\n` +
+      `🤖 اسم البوت: ${botName}\n` +
+      `🗣️ لغة الواجهة: العربية\n` +
+      `🕒 المنطقة الزمنية: ${settings.general.timezone}\n\n` +
+      `ℹ️ بعض خيارات التخصيص الإضافية ستتوفر لاحقًا.`,
     keyboard: [[groupBack(gid)]],
   };
 }
@@ -199,7 +199,9 @@ export function screenWordFilter(settings: GroupSettings, gid: number): Screen {
   const words = settings.protection.wordFilter.words;
   const list = words.length ? words.map((w) => `• ${w}`).join("\n") : "لا توجد كلمات محظورة بعد.";
   return {
-    text: `🔤 فلتر الكلمات\n\nالكلمات المحظورة حاليًا:\n${list}\n\nأضف كلمات مفصولة بفواصل عبر الزر بالأسفل:`,
+    text: `🔤 فلتر الكلمات المحظورة\n━━━━━━━━━━━━━━━━━━\n` +
+      `📚 الكلمات المسجلة (${words.length})\n${list}\n\n` +
+      `أضف كلمات جديدة مفصولة بفواصل، أو امسح القائمة لإعادة ضبط الفلتر:`,
     keyboard: [
       [{ text: "➕ إضافة كلمات", callback_data: encodeCallback("words_add", gid) }],
       [{ text: "🧹 مسح كل الكلمات", callback_data: encodeCallback("words_clear", gid) }],
@@ -212,7 +214,9 @@ export function screenWhitelist(settings: GroupSettings, gid: number): Screen {
   const list = settings.protection.antiLinks.whitelist;
   const rendered = list.length ? list.map((d) => `• ${d}`).join("\n") : "لا توجد نطاقات مسموحة بعد.";
   return {
-    text: `🔗 القائمة البيضاء للروابط\n\nالنطاقات المسموح بها رغم تفعيل منع الروابط:\n${rendered}\n\nأضف نطاقًا واحدًا (مثل example.com):`,
+    text: `🔗 النطاقات المسموح بها\n━━━━━━━━━━━━━━━━━━\n` +
+      `📚 النطاقات المستثناة (${list.length})\n${rendered}\n\n` +
+      `أضف نطاقًا موثوقًا مثل example.com للسماح بروابطه:`,
     keyboard: [
       [{ text: "➕ إضافة نطاق", callback_data: encodeCallback("whitelist_add", gid) }],
       [{ text: "🧹 مسح القائمة", callback_data: encodeCallback("whitelist_clear", gid) }],
@@ -230,7 +234,7 @@ export function screenMembersSettings(settings: GroupSettings, gid: number): Scr
   rows.push([{ text: "👥 قائمة الأعضاء", callback_data: encodeCallback("memberlist", gid) }]);
   rows.push([groupBack(gid)]);
   return {
-    text: `👥 ${SECTION_TITLES.members}\n\nالتحكم الكامل في الأعضاء داخل المجموعة:`,
+    text: `👥 إعدادات الأعضاء\n━━━━━━━━━━━━━━━━━━\nتحكم في قواعد دخول الأعضاء وسلوكهم داخل المجموعة.\n\nاضغط على أي قاعدة لتغيير حالتها:`,
     keyboard: rows,
   };
 }
@@ -321,7 +325,7 @@ export function screenBanned(members: MemberRow[], gid: number): Screen {
   if (!members.length) rows.push([{ text: "لا يوجد أعضاء محظورون 🎉", callback_data: encodeCallback("panel", gid) }]);
   rows.push([groupBack(gid)]);
   return {
-    text: `🚫 ${SECTION_TITLES.banned}\n\nاضغط على عضو لفك الحظر عنه:`,
+    text: `🚫 قائمة الحظر\n━━━━━━━━━━━━━━━━━━\nالأعضاء المحظورون حاليًا من المجموعة.\n\nاختر عضوًا لتنفيذ فك الحظر عنه:`,
     keyboard: rows,
   };
 }
@@ -378,7 +382,8 @@ export function screenTemplates(settings: GroupSettings, gid: number): Screen {
   rows.push([{ text: "➕ حفظ قالب جديد", callback_data: encodeCallback("tpl_add", gid) }]);
   rows.push([back("messages", gid)]);
   return {
-    text: `📝 قوالب الرسائل\n\n${list}\n\nاضغط قالبًا لحذفه، أو أضف قالبًا جديدًا (سأطلب منك الاسم ثم النص):`,
+    text: `📝 مكتبة قوالب الرسائل\n━━━━━━━━━━━━━━━━━━\n${list}\n\n` +
+      `يمكنك حفظ قوالب قابلة لإعادة الاستخدام أو حذف قالب لم تعد تحتاجه:`,
     keyboard: rows,
   };
 }
@@ -458,7 +463,7 @@ export function screenNotificationTargets(settings: GroupSettings, gid: number):
   });
   rows.push([back("notifications", gid)]);
   return {
-    text: `📨 وجهة التنبيهات\n\nاضغط على كل نوع لتغيير وجهته (داخل المجموعة / الخاص مع المالك / للمشرفين):`,
+    text: `📨 توجيه الإشعارات\n━━━━━━━━━━━━━━━━━━\nحدد الجهة التي تستقبل كل نوع من التنبيهات.\n\nاضغط على نوع التنبيه للتبديل بين الوجهات المتاحة:`,
     keyboard: rows,
   };
 }
@@ -625,7 +630,9 @@ export function screenResetConfirm(sectionKey: string, gid: number): Screen {
     all: "جميع الإعدادات",
   };
   return {
-    text: `⚠️ تأكيد إعادة الضبط\n\nسيتم إرجاع إعدادات «${labelMap[sectionKey] ?? sectionKey}» إلى الوضع الافتراضي.\nلن تُحذف السجلات أو بيانات الأعضاء.\n\nهل تريد المتابعة؟`,
+    text: `⚠️ تأكيد إعادة الضبط\n━━━━━━━━━━━━━━━━━━\n` +
+      `القسم المحدد: ${labelMap[sectionKey] ?? sectionKey}\n\n` +
+      `سيتم إرجاع إعدادات هذا القسم إلى الوضع الافتراضي.\n✅ لن تُحذف سجلات الأحداث أو بيانات الأعضاء.\n\nهل أنت متأكد من المتابعة؟`,
     keyboard: [
       [{ text: "✅ نعم، إعادة الضبط", callback_data: encodeCallback("reset_do", gid, [sectionKey]) }],
       [{ text: "↩️ إلغاء", callback_data: encodeCallback("reset", gid) }],
