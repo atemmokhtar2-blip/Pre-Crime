@@ -6,48 +6,42 @@ export const dynamic = "force-dynamic";
 
 type TelegramUpdate = {
   update_id?: number;
+  message?: {
+    text?: string;
+    chat?: { id?: number; type?: string };
+    from?: { first_name?: string };
+  };
   [key: string]: unknown;
 };
 
 function safeSecretMatch(actual: string | null, expected: string): boolean {
   if (!actual) return false;
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(actualBuffer, expectedBuffer);
+  const a = Buffer.from(actual);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function getUpdateType(update: TelegramUpdate): string {
-  return Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
-}
-
-function getChatId(update: TelegramUpdate): number | null {
-  const candidates = [
-    update.message,
-    update.edited_message,
-    update.channel_post,
-    update.edited_channel_post,
-    update.my_chat_member,
-    update.chat_member,
-    update.chat_join_request,
-  ];
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate === "object") {
-      const chat = (candidate as { chat?: { id?: unknown } }).chat;
-      if (chat && typeof chat.id === "number") return chat.id;
-    }
+async function telegram<T>(token: string, method: string, body?: object): Promise<T> {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+    signal: AbortSignal.timeout(10000),
+  });
+  const result = await response.json() as { ok?: boolean; result?: T; description?: string };
+  if (!response.ok || result.ok !== true || result.result === undefined) {
+    throw new Error(`telegram_${method}_failed`);
   }
-  return null;
+  return result.result;
 }
 
 export async function POST(request: Request) {
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expectedSecret) {
-    return Response.json({ ok: false, error: "webhook_not_configured" }, { status: 503 });
-  }
-
-  const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token");
-  if (!safeSecretMatch(suppliedSecret, expectedSecret)) {
+  if (!expectedSecret || !safeSecretMatch(
+    request.headers.get("x-telegram-bot-api-secret-token"),
+    expectedSecret,
+  )) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -62,30 +56,71 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "invalid_update_id" }, { status: 400 });
   }
 
+  const token = process.env.TELEGRAM_BOT_TOKEN;
   const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
+  if (!token || !databaseUrl) {
+    return Response.json({ ok: false, error: "server_configuration_missing" }, { status: 503 });
   }
 
   try {
     const sql = neon(databaseUrl);
-    const updateType = getUpdateType(update);
-    const chatId = getChatId(update);
-    const inserted = await sql`
+    const updateType = Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
+    const chatId = update.message?.chat?.id ?? null;
+
+    // A failed delivery can be retried; successful updates remain idempotent.
+    const claimed = await sql`
       INSERT INTO telegram_updates (update_id, update_type, chat_id, status)
-      VALUES (${update.update_id as number}, ${updateType}, ${chatId}, 'received')
-      ON CONFLICT (update_id) DO NOTHING
+      VALUES (${update.update_id as number}, ${updateType}, ${chatId}, 'processing')
+      ON CONFLICT (update_id) DO UPDATE
+        SET status = 'processing', error_code = NULL
+        WHERE telegram_updates.status = 'failed'
       RETURNING update_id
     `;
 
-    // Duplicate deliveries are acknowledged safely. Domain dispatch is added in Phase 1.
-    return Response.json({
-      ok: true,
-      accepted: inserted.length === 1,
-      duplicate: inserted.length === 0,
-    });
+    if (claimed.length === 0) {
+      return Response.json({ ok: true, duplicate: true });
+    }
+
+    try {
+      const text = update.message?.text?.trim() ?? "";
+      if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text) && update.message?.chat?.id) {
+        const me = await telegram<{ username?: string }>(token, "getMe");
+        if (!me.username) throw new Error("bot_username_unavailable");
+
+        const firstName = update.message.from?.first_name?.trim();
+        const greeting = firstName ? `أهلاً ${firstName} 👋\n\n` : "أهلاً بيك 👋\n\n";
+        const message =
+          greeting +
+          "أنا PRE-CRIME، مساعدك لإدارة وحماية مجموعات تيليجرام.\n\n" +
+          "اضغط الزر بالأسفل لإضافتي إلى مجموعتك، وبعد الإضافة امنحني صلاحيات الإدارة المطلوبة حتى أقدر أحمي المجموعة وأديرها.";
+        await telegram(token, "sendMessage", {
+          chat_id: update.message.chat.id,
+          text: message,
+          reply_markup: {
+            inline_keyboard: [[{
+              text: "➕ إضافة البوت إلى مجموعة",
+              url: `https://t.me/${me.username}?startgroup=true`,
+            }]],
+          },
+          disable_web_page_preview: true,
+        });
+      }
+
+      await sql`
+        UPDATE telegram_updates
+        SET status = 'processed', processed_at = NOW(), error_code = NULL
+        WHERE update_id = ${update.update_id as number}
+      `;
+      return Response.json({ ok: true, processed: true });
+    } catch {
+      await sql`
+        UPDATE telegram_updates
+        SET status = 'failed', error_code = 'handler_failed'
+        WHERE update_id = ${update.update_id as number}
+      `;
+      return Response.json({ ok: false, error: "update_processing_failed" }, { status: 503 });
+    }
   } catch {
-    // Do not acknowledge an update that was not durably stored; Telegram can retry it.
     return Response.json({ ok: false, error: "temporary_persistence_failure" }, { status: 503 });
   }
 }
