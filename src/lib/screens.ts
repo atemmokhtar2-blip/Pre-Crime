@@ -118,9 +118,11 @@ export function screenGuide(username: string): Screen {
 export function screenPanel(groupTitle: string, gid: number): Screen {
   return {
     text:
-      `🛡️ ${SECTION_TITLES.panel}\n\n` +
-      `المجموعة: ${groupTitle}\n\n` +
-      `اختر القسم الذي تريد إدارته:`,
+      `🛡️ ${BRAND}  •  مركز التحكم\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `🏷️ ${groupTitle}\n` +
+      `🟢 لوحة الإدارة جاهزة\n\n` +
+      `اختر وحدة الإدارة التي تريد فتحها من الأقسام التالية:`,
     keyboard: [
       [
         { text: `👥 الأعضاء`, callback_data: encodeCallback("memberlist", gid) },
@@ -188,7 +190,7 @@ export function screenProtection(settings: GroupSettings, gid: number): Screen {
   ]);
   rows.push([groupBack(gid)]);
   return {
-    text: `🛡️ ${SECTION_TITLES.protection}\n\nتحكم في أنظمة حماية المجموعة (اضغط الزر للتبديل):`,
+    text: `🛡️ مركز الحماية\n━━━━━━━━━━━━━━━━━━\nكل نظام حماية مستقل ويمكن تشغيله أو إيقافه مباشرة من الزر الخاص به.\n\n🟢 يعمل النظام عند ظهور «مفعّل»\n⚪ متوقف عند ظهور «متوقف»`,
     keyboard: rows,
   };
 }
@@ -246,10 +248,10 @@ export function screenMemberList(members: MemberRow[], gid: number, note?: strin
   rows.push([groupBack(gid)]);
   return {
     text:
-      `👥 ${SECTION_TITLES.memberList}\n\n` +
-      `عدد الأعضاء المعروض: ${members.length}\n` +
-      (note ? `${note}\n` : "") +
-      `اضغط على عضو لعرض ملفه:`,
+      `👥 إدارة الأعضاء\n━━━━━━━━━━━━━━━━━━\n` +
+      `📌 نتائج القائمة: ${members.length} عضو\n` +
+      (note ? `ℹ️ ${note}\n` : "") +
+      `\nاختر عضوًا لفتح ملفه ومراجعة نشاطه وإجراءاته:`,
     keyboard: rows,
   };
 }
@@ -335,7 +337,7 @@ export function screenMessagesSettings(settings: GroupSettings, gid: number): Sc
   };
   const cf = settings.messages.contentFilter;
   return {
-    text: `💬 ${SECTION_TITLES.messages}\n\nخصص الرسائل التلقائية والفلاتر:`,
+    text: `💬 مركز الرسائل\n━━━━━━━━━━━━━━━━━━\nإدارة رسائل الترحيب والوداع، وتنظيف المحتوى، وقوالب الرسائل الجاهزة.\n\nاختر الأداة التي تريد تخصيصها:`,
     keyboard: [
       [{ text: "👋 رسالة الترحيب", callback_data: encodeCallback("editwelcome", gid) }],
       [{ text: "👋 رسالة الوداع", callback_data: encodeCallback("editgoodbye", gid) }],
@@ -434,7 +436,7 @@ export function screenNotifications(settings: GroupSettings, gid: number): Scree
   ]);
   rows.push([groupBack(gid)]);
   return {
-    text: `🔔 ${SECTION_TITLES.notifications}\n\nاضغط على تنبيه لتفعيله/إيقافه، ومن «وجهة التنبيهات» حدد مستقبِلي الإشعارات:`,
+    text: `🔔 مركز التنبيهات\n━━━━━━━━━━━━━━━━━━\nتحكم في الأحداث التي تريد متابعتها، وحدد أين تصل كل رسالة تنبيه.\n\nاضغط على نوع التنبيه لتشغيله أو إيقافه:`,
     keyboard: rows,
   };
 }
@@ -516,7 +518,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 
 export function screenLogs(gid: number): Screen {
   return {
-    text: `📋 ${SECTION_TITLES.logs}\n\nاختر قسم السجل الذي تريد عرضه:`,
+    text: `📋 مركز سجل الأحداث\n━━━━━━━━━━━━━━━━━━\nكل إجراء مهم داخل المجموعة يُسجّل هنا للمراجعة والرجوع إليه.\n\nاختر نوع السجل لعرض الأحداث المرتبطة به:`,
     keyboard: [
       [{ text: "👥 سجل الأعضاء", callback_data: encodeCallback("loglist", gid, ["member"]) }],
       [{ text: "🚫 سجل الحظر", callback_data: encodeCallback("loglist", gid, ["ban"]) }],
@@ -650,18 +652,18 @@ export function screenStats(stats: GroupStats, gid: number): Screen {
   const protection = defaultSettings().protection;
   return {
     text:
-      `📊 ${SECTION_TITLES.stats}\n` +
-      `المجموعة: ${stats.groupTitle}\n\n` +
-      `👥 إجمالي الأعضاء: ${stats.memberCount}\n` +
-      `🟢 الأعضاء النشطون: ${stats.activeCount}\n` +
-      `💬 إجمالي الرسائل المسجلة: ${stats.messageCount}\n` +
-      `⚠️ إجمالي التحذيرات: ${stats.warningCount}\n` +
-      `🚫 عدد الحظر: ${stats.banCount}\n` +
-      `🔇 عدد الكتم: ${stats.muteCount}\n` +
+      `📊 تقرير المجموعة\n━━━━━━━━━━━━━━━━━━\n` +
+      `🏷️ ${stats.groupTitle}\n\n` +
+      `👥 الأعضاء: ${stats.memberCount}   •   🟢 النشطون: ${stats.activeCount}\n` +
+      `💬 الرسائل المسجلة: ${stats.messageCount}\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `⚠️ التحذيرات: ${stats.warningCount}\n` +
+      `🚫 الحظر: ${stats.banCount}   •   🔇 الكتم: ${stats.muteCount}\n` +
       `📋 أحداث السجل: ${stats.auditCount}\n` +
-      `🛡️ أنظمة الحماية المفعّلة: ${stats.enabledProtection}/${PROTECTION_TOGGLES.filter((t) => t.kind === "boolean").length}\n` +
-      `🔎 جاهزية البوت: ${stats.botReady ? "جاهز ✅" : "غير مكتمل ⚠️"}\n\n` +
-      FOOTER,
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `🛡️ الحماية المفعّلة: ${stats.enabledProtection}/${PROTECTION_TOGGLES.filter((t) => t.kind === "boolean").length}\n` +
+      `🤖 حالة البوت: ${stats.botReady ? "جاهز ويعمل ✅" : "يحتاج مراجعة ⚠️"}\n\n` +
+      `📌 الأرقام المعروضة من بيانات المجموعة المسجلة.\n` + FOOTER,
     keyboard: [[{ text: "🔄 تحديث", callback_data: encodeCallback("stats", gid) }], [groupBack(gid)]],
   };
 }
