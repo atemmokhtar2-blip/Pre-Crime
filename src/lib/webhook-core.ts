@@ -1090,8 +1090,25 @@ export function createWebhookHandler(deps: WebhookDeps) {
   async function handlePendingReply(chatId: number, text: string, from?: TelegramFrom): Promise<boolean> {
     const pending = await repo.getPending(chatId);
     if (!pending) return false;
-    await repo.clearPending(chatId);
     const gid = pending.group_id;
+    const access = await authorize(gid, from?.id);
+    const pendingAction = pending.action;
+    const memberAction = String(pending.context.action ?? "");
+    const allowed = Boolean(access) && (
+      (pendingAction === "member_action" && (
+        (["ban", "kick"].includes(memberAction) && access!.checks.canBan) ||
+        (["warn", "mute", "unmute", "unwarn"].includes(memberAction) && access!.checks.canMute)
+      )) ||
+      (["edit_welcome", "edit_goodbye", "add_template"].includes(pendingAction) && access!.checks.canMessages) ||
+      (["add_words", "add_whitelist"].includes(pendingAction) && access!.checks.canProtection) ||
+      (pendingAction === "add_admin" && access!.checks.canSettings)
+    );
+    if (!allowed) {
+      await repo.clearPending(chatId);
+      await sendSafe(chatId, "⚠️ لم تعد تملك صلاحية إكمال هذا التعديل.");
+      return true;
+    }
+    await repo.clearPending(chatId);
 
     switch (pending.action) {
       case "member_action": {
