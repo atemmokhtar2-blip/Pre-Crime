@@ -20,10 +20,10 @@ export type MessageSignal = {
 function normalizeLinkText(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[\\u200B-\\u200F\\u2060\\uFEFF]/g, "")
+    .replace(/[\u200B-\u200F\u2060\uFEFF]/g, "")
     .replace(/[。．｡]/g, ".")
-    .replace(/\\s*(?:\\[\\s*\\.\\s*\\]|\\(\\s*\\.\\s*\\)|\\{\\s*dot\\s*\\}|\\s+dot\\s+)\\s*/gi, ".")
-    .replace(/hxxps?:\\/\\//gi, (scheme) => scheme.toLowerCase().startsWith("hxxps") ? "https://" : "http://");
+    .replace(/\s*(?:\[\s*\.\s*\]|\(\s*\.\s*\)|\{\s*dot\s*\}|\s+dot\s+)\s*/gi, ".")
+    .replace(/hxxps?:\/\//gi, (scheme) => scheme.toLowerCase().startsWith("hxxps") ? "https://" : "http://");
 }
 
 export function extractSignal(message: TelegramMessage): MessageSignal {
@@ -37,13 +37,11 @@ export function extractSignal(message: TelegramMessage): MessageSignal {
     }
     return [];
   });
-  // Also catch disguised schemes, Telegram deep links, www links and domains
-  // without schemes, including Unicode and less-common public suffixes.
   const rawLinks = normalizedText.match(
-    /(?:https?:\\/\\/|tg:\\/\\/|www\\.)[^\\s<>()\\[\\]{}"']+|(?:t\\.me|telegram\\.me)\\/[^\\s<>()\\[\\]{}"']+|(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?\\.)+[\\p{L}]{2,}(?::\\d{1,5})?(?:\\/[^\\s<>()\\[\\]{}"']*)?/giu,
+    /(?:https?:\/\/|tg:\/\/|www\.)[^\s<>()\[\]{}"']+|(?:t\.me|telegram\.me)\/[^\s<>()\[\]{}"']+|(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}]{2,}(?::\d{1,5})?(?:\/[^\s<>()\[\]{}"']*)?/giu,
   ) ?? [];
   const links = [...new Set([...entityLinks, ...rawLinks]
-    .map((url) => normalizeLinkText(url).replace(/[.,!?;:،؛)\\]}]+$/g, "").toLowerCase())
+    .map((url) => normalizeLinkText(url).replace(/[.,!?;:،؛)\]}]+$/g, "").toLowerCase())
     .filter(Boolean))];
   const hasForward = Boolean(message.forward_origin || message.forward_from || message.forward_from_chat);
   const hasMedia = Boolean(
@@ -51,10 +49,8 @@ export function extractSignal(message: TelegramMessage): MessageSignal {
     message.voice || message.audio || message.video_note || message.paid_media
   );
   const hasDocument = Boolean(message.document);
-
   return { text, hasUrl: links.length > 0, links, hasForward, hasMedia, hasDocument };
 }
-
 // Pure policy evaluation: given the current signal and recent events for a user,
 // return the violations the policy produces. "recent" is a rolling window of the
 // user's messages plus timestamps supplied by the caller (so this stays testable
