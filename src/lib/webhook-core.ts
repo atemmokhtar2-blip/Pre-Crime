@@ -355,13 +355,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     recordEvent(key, signal.text);
 
     if (violations.length > 0) {
-      try {
-        await bot.deleteMessage(gid, message.message_id);
-      } catch {
-        /* ignore */
-      }
-
-      // Never punish admins automatically.
+      // Check administrator status before deleting: admins must be exempt from both.
       let actorStatus: MemberStatus | undefined;
       try {
         actorStatus = (await bot.getChatMember(gid, userId)).status;
@@ -369,6 +363,15 @@ export function createWebhookHandler(deps: WebhookDeps) {
         actorStatus = undefined;
       }
       if (actorStatus !== "creator" && actorStatus !== "administrator") {
+        try {
+          await bot.deleteMessage(gid, message.message_id);
+        } catch (error) {
+          console.error("telegram_violation_delete_failed", {
+            chatId: gid,
+            messageId: message.message_id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         const label = memberLabel(name, from.username || null, userId);
         await repo.addAudit(gid, 0, "PRE CRIME", "violation", label, { violations: violations.map((v) => VIOLATION_LABELS[v]) });
         await applyPunishment(gid, userId, "PRE CRIME", label, violations);
