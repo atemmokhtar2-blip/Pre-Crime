@@ -252,15 +252,17 @@ export interface TelegramMessage {
   forward_from?: unknown;
   forward_from_chat?: unknown;
   forward_origin?: unknown;
-  entities?: Array<{ type: string }>;
-  caption_entities?: Array<{ type: string }>;
+  entities?: Array<{ type: string; offset?: number; length?: number; url?: string }>;
+  caption_entities?: Array<{ type: string; offset?: number; length?: number; url?: string }>;
   sticker?: unknown;
   animation?: unknown;
   video?: unknown;
   document?: unknown;
   photo?: unknown;
   audio?: unknown;
-  voice?: unknown;\n  video_note?: unknown;\n  paid_media?: unknown;
+  voice?: unknown;
+  video_note?: unknown;
+  paid_media?: unknown;
 }
 
 export interface TelegramUpdate {
