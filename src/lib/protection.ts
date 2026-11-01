@@ -44,54 +44,97 @@ export interface RecentEvent {
 }
 
 function normalizeText(value: string): string {
-  return value.toLowerCase()
-    .normalize("NFKC")
+  return value.toLowerCase().normalize("NFKC")
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/[پ]/g, "ب")
-    .replace(/[ڤ]/g, "ف")
-    .replace(/[گ]/g, "ك");
+    .replace(/[أإآٱ]/g, "ا").replace(/ؤ/g, "و").replace(/ئ/g, "ي")
+    .replace(/ى/g, "ي").replace(/ة/g, "ه")
+    .replace(/[پ]/g, "ب").replace(/[ڤ]/g, "ف").replace(/[گ]/g, "ك");
+}
+
+function normalizeObfuscation(value: string): string {
+  return normalizeText(value)
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/3/g, "ع").replace(/7/g, "ح").replace(/8/g, "ق").replace(/9/g, "ص")
+    .replace(/[|!$]/g, "");
+}
+
+function foldLatinArabizi(value: string): string {
+  return normalizeObfuscation(value)
+    .replace(/kh/g, "خ").replace(/sh/g, "ش").replace(/gh/g, "غ")
+    .replace(/th/g, "ث").replace(/dh/g, "ذ").replace(/aa/g, "ا")
+    .replace(/a/g, "ا").replace(/b/g, "ب").replace(/t/g, "ت")
+    .replace(/g/g, "ج").replace(/j/g, "ج").replace(/d/g, "د")
+    .replace(/r/g, "ر").replace(/z/g, "ز").replace(/s/g, "س")
+    .replace(/f/g, "ف").replace(/q/g, "ق").replace(/k/g, "ك")
+    .replace(/l/g, "ل").replace(/m/g, "م").replace(/n/g, "ن")
+    .replace(/h/g, "ه").replace(/w/g, "و").replace(/y/g, "ي")
+    .replace(/e/g, "ي").replace(/o/g, "و").replace(/u/g, "و");
 }
 
 function compactText(value: string): string {
-  return normalizeText(value).replace(/[^\p{L}\p{N}]+/gu, "");
+  return normalizeObfuscation(value).replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function tokens(value: string): string[] {
-  return normalizeText(value).match(/[\p{L}\p{N}]+/gu) ?? [];
+  return normalizeObfuscation(value).match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-// Baseline Egyptian/Arabic abusive terms. Group owners can extend this list
-// with their own words; the filter remains fully local and has no API cost.
 const BUILTIN_BLOCKED_WORDS = [
-  "كسمك", "كسمك", "كس امك", "كس اختك", "كسختك", "كسم", "كس ام",
+  "كسمك", "كسم", "كس امك", "كس ام", "كس اختك", "كسختك",
   "شرموط", "شرموطه", "شراميط", "متناك", "متناكه", "منيوك", "منيوكه",
-  "خول", "خولات", "عرص", "قحبه", "قحاب", "لبوه", "لبوه",
-  "طيز", "زب", "زبر", "نيك", "انيك", "ينك", "خول",
+  "خول", "خولات", "عرص", "قحبه", "قحاب", "لبوه", "طيز", "زبر",
+  "نيك", "انيك", "ينك", "يا ابن الكلب", "ابن الكلب", "كلب", "حيوان",
 ];
 
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  if (i < a.length || j < b.length) edits++;
+  return edits <= 1;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+}
+
+function separatorObfuscationMatch(message: string, word: string): boolean {
+  const chars = [...word];
+  if (chars.length < 3) return false;
+  const pattern = chars.map(escapeRegExp).join("[\\s\\p{P}\\p{S}ـ]{0,2}");
+  return new RegExp(pattern, "u").test(normalizeText(message));
+}
+
 function containsBlockedWord(message: string, customWords: string[]): boolean {
-  const normalizedTokens = tokens(message);
-  const compactMessage = compactText(message);
+  const normalizedTokens = tokens(message).map((token) => foldLatinArabizi(token));
+  const compact = compactText(message);
   const candidates = [...BUILTIN_BLOCKED_WORDS, ...customWords]
-    .map((word) => ({ spaced: normalizeText(word).trim(), compact: compactText(word) }))
-    .filter((word) => word.compact.length >= 2);
+    .map((word) => compactText(word))
+    .filter((word) => word.length >= 3);
 
   for (const candidate of candidates) {
-    // Exact token match avoids false positives inside harmless longer words.
-    if (normalizedTokens.some((token) => token === candidate.compact)) return true;
-    // Catch separators inserted between letters: ك س م ك / كـسـمـك / ك*س*م*ك.
-    if (candidate.compact.length >= 3 && compactMessage.includes(candidate.compact)) return true;
+    const forms = [candidate, foldLatinArabizi(candidate)];
+    for (const form of forms) {
+      if (!form) continue;
+      if (normalizedTokens.some((token) => token === form)) return true;
+      if (separatorObfuscationMatch(message, form)) return true;
+      if (compact === form) return true;
+    }
   }
 
-  // Catch character repetition used to evade matching, e.g. كــــســــمــــك.
-  const squeezed = normalizeText(message).replace(/(.)\1{1,}/gu, "$1");
-  const squeezedCompact = compactText(squeezed);
-  return candidates.some((candidate) => candidate.compact.length >= 3 && squeezedCompact.includes(candidate.compact));
+  for (const token of normalizedTokens) {
+    for (const candidate of candidates) {
+      if (candidate.length >= 5 && token.length >= 5 && editDistanceAtMostOne(token, candidate)) return true;
+    }
+  }
+  return false;
 }
 
 export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSignal, recent: RecentEvent[], now: number): ViolationKind[] {
