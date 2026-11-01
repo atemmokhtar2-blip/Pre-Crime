@@ -209,6 +209,7 @@ export interface PreCrimeRepo {
   listAudit(chatId: number, eventType?: string, limit?: number): Promise<AuditRow[]>;
   countAudit(chatId: number, eventType?: string): Promise<number>;
   totalMessages(chatId: number): Promise<number>;
+  recordMessageEvent(chatId: number, userId: number, updateId: number, text: string, at: number, windowMs: number): Promise<Array<{ at: number; text: string }>>;
   totalWarnings(chatId: number): Promise<number>;
   totalBans(chatId: number): Promise<number>;
   totalMutes(chatId: number): Promise<number>;
