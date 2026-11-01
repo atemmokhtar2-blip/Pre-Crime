@@ -22,7 +22,7 @@ export function extractSignal(message: TelegramMessage): MessageSignal {
   const hasUrl = entities.some((e) => e.type === "url" || e.type === "text_link");
   // Fallback URL detection for plain-text links Telegram may not flag.
   const textHasUrl = /(https?:\/\/|www\.|t\.me\/|telegram\.me\/)/i.test(text);
-  const hasForward = Boolean(message.forward_from || message.forward_from_chat);
+  const hasForward = Boolean(message.forward_origin || message.forward_from || message.forward_from_chat);
   const hasMedia = Boolean(message.photo || message.video || message.animation || message.sticker || message.voice || message.audio);
   const hasDocument = Boolean(message.document);
 
