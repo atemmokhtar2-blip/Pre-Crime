@@ -82,19 +82,20 @@ export function createWebhookHandler(deps: WebhookDeps) {
   async function sendSafe(chatId: number, text: string, keyboard?: InlineKeyboardButton[][]): Promise<void> {
     try {
       await bot.sendMessage(chatId, text, keyboard?.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined);
-    } catch {
-      /* private-chat delivery failures must never fail the update */
+    } catch (error) {
+      console.error("telegram_send_message_failed", { chatId, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
   async function editScreen(chatId: number, messageId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
     try {
       await bot.editMessageText(chatId, messageId, screen.text, screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined);
-    } catch {
+    } catch (error) {
+      console.error("telegram_edit_message_failed", { chatId, messageId, error: error instanceof Error ? error.message : String(error) });
       try {
         await bot.sendMessage(chatId, screen.text, screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined);
-      } catch {
-        /* ignore */
+      } catch (sendError) {
+        console.error("telegram_fallback_message_failed", { chatId, error: sendError instanceof Error ? sendError.message : String(sendError) });
       }
     }
   }
@@ -102,8 +103,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
   async function ack(callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
     try {
       await bot.answerCallbackQuery(callbackQueryId, { text, show_alert: showAlert });
-    } catch {
-      /* ignore */
+    } catch (error) {
+      console.error("telegram_callback_ack_failed", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
