@@ -137,12 +137,18 @@ export async function POST(request: Request) {
         const groupGreeting = groupName
           ? `أهلاً بأعضاء مجموعة ${groupName} 👋\\n\\n`
           : "أهلاً يا جماعة 👋\\n\\n";
+        console.info("telegram_bot_added_to_group", {
+          chatId: membership.chat.id,
+          chatType: membership.chat.type,
+          oldStatus,
+          newStatus,
+        });
         await telegram(token, "sendMessage", {
           chat_id: membership.chat.id,
           text:
             groupGreeting +
-            "تمت إضافتي للمجموعة بنجاح 🤖\\n" +
-            "علشان أبدأ إدارة وحماية المجموعة، ارفعني مشرف وفعّل الصلاحيات المطلوبة، خصوصًا حذف الرسائل وحظر المستخدمين وإدارة الأعضاء.",
+            "أنا PRE-CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\\n" +
+            "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء وإدارة المجموعة، وبعدها هأكد لكم إنّي جاهز للعمل.",
           disable_web_page_preview: true,
         });
       }
@@ -153,7 +159,12 @@ export async function POST(request: Request) {
         WHERE update_id = ${update.update_id as number}
       `;
       return Response.json({ ok: true, processed: true });
-    } catch {
+    } catch (error) {
+      console.error("telegram_update_handler_failed", {
+        updateId: update.update_id,
+        updateType,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await sql`
         UPDATE telegram_updates
         SET status = 'failed', error_code = 'handler_failed'
