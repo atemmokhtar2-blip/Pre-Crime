@@ -72,7 +72,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
   async function sendGroupNotice(chatId: number, text: string, keyboard?: InlineKeyboardButton[][]): Promise<void> {
     const lines = text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim()).filter(Boolean);
-    const title = (lines.shift() ?? "إشعار المجموعة").replace(/\\s+/g, " ").trim();
+    const title = (lines.shift() ?? "إشعار المجموعة").replace(/\s+/g, " ").trim();
     const body = lines.map((line) => "┃  ➤  " + line);
     const markdown = [
       "**╭━━━〔 " + title + " 〕━━━╮**",
@@ -80,7 +80,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       ...body,
       "",
       "**╰━━━━━━━━━━━━━━━━━━╯**",
-    ].join("\\n");
+    ].join("\n");
     const markup = keyboard?.length ? { reply_markup: { inline_keyboard: styledKeyboard(keyboard) } } : undefined;
     try {
       await bot.sendRichMessage(chatId, markdown, markup);
@@ -270,14 +270,14 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const reasonLabel = violations.includes("word") ? "كلمات مسيئة" : base;
         const safeReason = safe(reasonLabel);
         const warningMarkdown =
-          `**╭━━━〔 ⚠️ تَـحْـذِيـر الـمُـسْـتَـخْـدِم 〕━━━╮**\\n\\n` +
-          `**┃  ➤  👤 الـعُـضْـو**\\n` +
-          `┃      ${safeName}\\n\\n` +
-          `**┃  ➤  📌 الـسَّـبَـب**\\n` +
-          `┃      ${safeReason}\\n\\n` +
-          `**┃  ➤  🔢 عَـدَد الـتَّـحْـذِيـرَات**\\n` +
-          `┃      ${count}\\n\\n` +
-          `**╰━━━━━━━━━━━━━━━━━━╯**;
+          `**╭━━━〔 ⚠️ تَـحْـذِيـر الـمُـسْـتَـخْـدِم 〕━━━╮**\n\n` +
+          `**┃  ➤  👤 الـعُـضْـو**\n` +
+          `┃      ${safeName}\n\n` +
+          `**┃  ➤  📌 الـسَّـبَـب**\n` +
+          `┃      ${safeReason}\n\n` +
+          `**┃  ➤  🔢 عَـدَد الـتَّـحْـذِيـرَات**\n` +
+          `┃      ${count}\n\n` +
+          `**╰━━━━━━━━━━━━━━━━━━╯**`;
         await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
