@@ -245,6 +245,7 @@ export interface TelegramMessage {
   new_chat_members?: Array<{ id: number; username?: string; first_name?: string }>;
   forward_from?: unknown;
   forward_from_chat?: unknown;
+  forward_origin?: unknown;
   entities?: Array<{ type: string }>;
   caption_entities?: Array<{ type: string }>;
   sticker?: unknown;
