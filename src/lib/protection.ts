@@ -17,18 +17,39 @@ export type MessageSignal = {
   links?: string[];
 };
 
+function normalizeLinkText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\\u200B-\\u200F\\u2060\\uFEFF]/g, "")
+    .replace(/[。．｡]/g, ".")
+    .replace(/\\s*(?:\\[\\s*\\.\\s*\\]|\\(\\s*\\.\\s*\\)|\\{\\s*dot\\s*\\}|\\s+dot\\s+)\\s*/gi, ".")
+    .replace(/hxxps?:\\/\\//gi, (scheme) => scheme.toLowerCase().startsWith("hxxps") ? "https://" : "http://");
+}
+
 export function extractSignal(message: TelegramMessage): MessageSignal {
   const text = message.text ?? message.caption ?? "";
+  const normalizedText = normalizeLinkText(text);
   const entities = [...(message.entities ?? []), ...(message.caption_entities ?? [])];
-  const entityLinks = entities
-    .filter((entity) => entity.type === "url" || entity.type === "text_link")
-    .map((entity) => "url" in entity && typeof entity.url === "string" ? entity.url : "")
-    .filter(Boolean);
-  // Catch ordinary domains and Telegram links even when Telegram omits URL entities.
-  const rawLinks = text.match(/(?:https?:\/\/|www\.)[^\s<>()]+|(?:t\.me|telegram\.me)\/[^\s<>()]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|me|co|info|biz|app|dev|eg|xyz|site|online|store|gg|ly)(?:\/[^\s<>()]*)?/gi) ?? [];
-  const links = [...new Set([...entityLinks, ...rawLinks].map((url) => url.replace(/[.,!?;:،؛)\]}]+$/g, "").toLowerCase()))];
+  const entityLinks = entities.flatMap((entity) => {
+    if (entity.type === "text_link" && typeof entity.url === "string") return [entity.url];
+    if (entity.type === "url" && typeof entity.offset === "number" && typeof entity.length === "number") {
+      return [text.slice(entity.offset, entity.offset + entity.length)];
+    }
+    return [];
+  });
+  // Also catch disguised schemes, Telegram deep links, www links and domains
+  // without schemes, including Unicode and less-common public suffixes.
+  const rawLinks = normalizedText.match(
+    /(?:https?:\\/\\/|tg:\\/\\/|www\\.)[^\\s<>()\\[\\]{}"']+|(?:t\\.me|telegram\\.me)\\/[^\\s<>()\\[\\]{}"']+|(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?\\.)+[\\p{L}]{2,}(?::\\d{1,5})?(?:\\/[^\\s<>()\\[\\]{}"']*)?/giu,
+  ) ?? [];
+  const links = [...new Set([...entityLinks, ...rawLinks]
+    .map((url) => normalizeLinkText(url).replace(/[.,!?;:،؛)\\]}]+$/g, "").toLowerCase())
+    .filter(Boolean))];
   const hasForward = Boolean(message.forward_origin || message.forward_from || message.forward_from_chat);
-  const hasMedia = Boolean(message.photo || message.video || message.animation || message.sticker || message.voice || message.audio);
+  const hasMedia = Boolean(
+    message.photo || message.video || message.animation || message.sticker ||
+    message.voice || message.audio || message.video_note || message.paid_media
+  );
   const hasDocument = Boolean(message.document);
 
   return { text, hasUrl: links.length > 0, links, hasForward, hasMedia, hasDocument };
