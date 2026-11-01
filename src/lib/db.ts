@@ -179,7 +179,7 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
         chat_type: String(r.chat_type),
         status: (r.status as GroupRow["status"]) ?? "active",
         timezone: String(r.timezone ?? "UTC"),
-        added_at: String(r.added_at ?? ""),
+        added_at: toIsoTimestamp(r.added_at),
         owner_user_id: r.owner_user_id == null ? null : Number(r.owner_user_id),
       };
     },
@@ -195,7 +195,7 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
           chat_type: String(row.chat_type),
           status: (row.status as GroupRow["status"]) ?? "active",
           timezone: String(row.timezone ?? "UTC"),
-          added_at: String(row.added_at ?? ""),
+          added_at: toIsoTimestamp(row.added_at),
           owner_user_id: row.owner_user_id == null ? null : Number(row.owner_user_id),
         };
       });
@@ -406,6 +406,12 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
   };
 }
 
+function toIsoTimestamp(value: unknown): string {
+  if (value == null || value === "") return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+}
+
 function mapMember(r: Record<string, unknown>): MemberRow {
   return {
     chat_id: Number(r.chat_id),
@@ -413,8 +419,8 @@ function mapMember(r: Record<string, unknown>): MemberRow {
     username: (r.username as string) ?? null,
     display_name: String(r.display_name ?? ""),
     status: (r.status as MemberRow["status"]) ?? "member",
-    joined_at: r.joined_at ? String(r.joined_at) : null,
-    last_seen_at: r.last_seen_at ? String(r.last_seen_at) : null,
+    joined_at: r.joined_at ? toIsoTimestamp(r.joined_at) : null,
+    last_seen_at: r.last_seen_at ? toIsoTimestamp(r.last_seen_at) : null,
     message_count: Number(r.message_count ?? 0),
     warning_count: Number(r.warning_count ?? 0),
     warned: Boolean(r.warned),
@@ -430,7 +436,7 @@ function mapAudit(r: Record<string, unknown>): AuditRow {
     event_type: String(r.event_type),
     target: r.target ? String(r.target) : null,
     details: String(r.details ?? "{}"),
-    created_at: String(r.created_at ?? ""),
+    created_at: toIsoTimestamp(r.created_at),
   };
 }
 
