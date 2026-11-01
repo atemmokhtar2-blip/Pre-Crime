@@ -19,14 +19,18 @@ export type MessageSignal = {
 export function extractSignal(message: TelegramMessage): MessageSignal {
   const text = message.text ?? message.caption ?? "";
   const entities = [...(message.entities ?? []), ...(message.caption_entities ?? [])];
-  const hasUrl = entities.some((e) => e.type === "url" || e.type === "text_link");
-  // Fallback URL detection for plain-text links Telegram may not flag.
-  const textHasUrl = /(https?:\/\/|www\.|t\.me\/|telegram\.me\/)/i.test(text);
+  const entityLinks = entities
+    .filter((entity) => entity.type === "url" || entity.type === "text_link")
+    .map((entity) => "url" in entity && typeof entity.url === "string" ? entity.url : "")
+    .filter(Boolean);
+  // Catch ordinary domains and Telegram links even when Telegram omits URL entities.
+  const rawLinks = text.match(/(?:https?:\/\/|www\.)[^\s<>()]+|(?:t\.me|telegram\.me)\/[^\s<>()]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|me|co|info|biz|app|dev|eg|xyz|site|online|store|gg|ly)(?:\/[^\s<>()]*)?/gi) ?? [];
+  const links = [...new Set([...entityLinks, ...rawLinks].map((url) => url.replace(/[.,!?;:،؛)\]}]+$/g, "").toLowerCase()))];
   const hasForward = Boolean(message.forward_origin || message.forward_from || message.forward_from_chat);
   const hasMedia = Boolean(message.photo || message.video || message.animation || message.sticker || message.voice || message.audio);
   const hasDocument = Boolean(message.document);
 
-  return { text, hasUrl: hasUrl || textHasUrl, hasForward, hasMedia, hasDocument };
+  return { text, hasUrl: links.length > 0, links, hasForward, hasMedia, hasDocument };
 }
 
 // Pure policy evaluation: given the current signal and recent events for a user,
@@ -53,7 +57,10 @@ export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSign
     violations.push("flood");
   }
 
-  const allowedLink = policy.antiLinks.whitelist.length > 0 && policy.antiLinks.whitelist.some((d) => signal.text.toLowerCase().includes(d.toLowerCase()));
+  const allowedLink = policy.antiLinks.whitelist.length > 0 && policy.antiLinks.whitelist.some((domain) => {
+    const normalized = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "");
+    return normalized.length > 0 && (signal.links ?? []).some((link) => link.replace(/^https?:\/\//, "").replace(/^www\./, "").includes(normalized));
+  });
   if (policy.antiLinks.enabled && signal.hasUrl && !allowedLink) {
     violations.push("link");
   }
