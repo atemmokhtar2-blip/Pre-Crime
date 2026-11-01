@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import { evaluateBotPermissions } from "../../../../lib/onboarding";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,14 +112,7 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
       can_invite_users?: boolean;
     }>(token, "getChatMember", { chat_id: message.chat.id, user_id: me.id });
 
-    const requirements = [
-      ["حذف الرسائل", botMember.can_delete_messages === true],
-      ["حظر وتقييد الأعضاء", botMember.can_restrict_members === true],
-      ["دعوة المستخدمين", botMember.can_invite_users === true],
-    ] as const;
-    const isAdmin = botMember.status === "administrator" || botMember.status === "creator";
-    const missing = requirements.filter(([, ok]) => !ok).map(([label]) => label);
-    const ready = isAdmin && missing.length === 0;
+    const { isAdmin, missing, ready } = evaluateBotPermissions(botMember);
     const report = ready
       ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\\n\\nملاحظة: ده فحص للصلاحيات فقط، وليس تأكيدًا لتفعيل كل أنظمة الحماية المتقدمة."
       : "⚠️ البوت غير جاهز بالكامل.\\n" +
