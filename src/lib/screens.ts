@@ -418,7 +418,6 @@ export function screenNotifications(settings: GroupSettings, gid: number): Scree
     { key: "violations", label: "تنبيه المخالفات", hint: "إشعار عند اكتشاف مخالفة", toggleKey: "n_violation", targetKey: "violations" },
     { key: "bans", label: "تنبيه الحظر", hint: "إشعار عند حظر عضو", toggleKey: "n_ban", targetKey: "bans" },
     { key: "promotions", label: "تنبيه الترقية لمشرف", hint: "إشعار عند تغيير الصلاحيات", toggleKey: "n_promote", targetKey: "promotions" },
-    { key: "dailyReport", label: "التقارير اليومية", hint: "ملخص نشاط المجموعة كل يوم", toggleKey: "n_daily", targetKey: "dailyReport" },
   ];
   const ruleByKey: Record<string, keyof GroupSettings["notifications"]> = {
     memberJoined: "memberJoined",
@@ -426,7 +425,6 @@ export function screenNotifications(settings: GroupSettings, gid: number): Scree
     violations: "violations",
     bans: "bans",
     promotions: "promotions",
-    dailyReport: "dailyReport",
   };
   const rows: InlineKeyboardButton[][] = rules.map((r) => {
     const rule = settings.notifications[ruleByKey[r.key]];
@@ -453,7 +451,6 @@ export function screenNotificationTargets(settings: GroupSettings, gid: number):
     { key: "violations", label: "المخالفات" },
     { key: "bans", label: "الحظر" },
     { key: "promotions", label: "الترقية" },
-    { key: "dailyReport", label: "التقرير اليومي" },
   ];
   const rows: InlineKeyboardButton[][] = items.map((it) => {
     const rule = settings.notifications[it.key];
