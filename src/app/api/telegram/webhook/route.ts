@@ -64,6 +64,18 @@ export async function POST(request: Request) {
 
   try {
     const sql = neon(databaseUrl);
+    await sql\`
+      CREATE TABLE IF NOT EXISTS telegram_updates (
+        update_id BIGINT PRIMARY KEY,
+        update_type TEXT NOT NULL,
+        chat_id BIGINT,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        processed_at TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'received'
+          CHECK (status IN ('received','processing','processed','failed')),
+        error_code TEXT
+      )
+    \`;
     const updateType = Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
     const chatId = update.message?.chat?.id ?? null;
 
