@@ -14,6 +14,7 @@ export type MessageSignal = {
   hasForward: boolean;
   hasMedia: boolean;
   hasDocument: boolean;
+  links?: string[];
 };
 
 export function extractSignal(message: TelegramMessage): MessageSignal {
@@ -42,6 +43,15 @@ export interface RecentEvent {
   text: string;
 }
 
+function normalizeText(value: string): string {
+  return value.toLowerCase()
+    .normalize("NFKC")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه");
+}
+
 export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSignal, recent: RecentEvent[], now: number): ViolationKind[] {
   const violations: ViolationKind[] = [];
   const spamWindowMs = Math.max(policy.antiSpam.windowSeconds, 1) * 1000;
@@ -57,9 +67,17 @@ export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSign
     violations.push("flood");
   }
 
-  const allowedLink = policy.antiLinks.whitelist.length > 0 && policy.antiLinks.whitelist.some((domain) => {
-    const normalized = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "");
-    return normalized.length > 0 && (signal.links ?? []).some((link) => link.replace(/^https?:\/\//, "").replace(/^www\./, "").includes(normalized));
+  const allowedLink = policy.antiLinks.whitelist.some((domain) => {
+    const allowedHost = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+    if (!allowedHost) return false;
+    return (signal.links ?? []).some((link) => {
+      try {
+        const host = new URL(link.includes("://") ? link : "https://" + link).hostname.toLowerCase().replace(/^www\./, "");
+        return host === allowedHost || host.endsWith("." + allowedHost);
+      } catch {
+        return false;
+      }
+    });
   });
   if (policy.antiLinks.enabled && signal.hasUrl && !allowedLink) {
     violations.push("link");
@@ -75,8 +93,8 @@ export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSign
 
   const words = policy.wordFilter.words.filter((w) => w && w.trim().length > 0);
   if (policy.wordFilter.enabled && words.length > 0) {
-    const lower = signal.text.toLowerCase();
-    if (words.some((w) => lower.includes(w.trim().toLowerCase()))) {
+    const lower = normalizeText(signal.text);
+    if (words.some((w) => lower.includes(normalizeText(w.trim())))) {
       violations.push("word");
     }
   }
