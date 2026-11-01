@@ -128,11 +128,16 @@ export interface BotApi {
     text: string,
     opts?: { reply_markup?: InlineKeyboardMarkup | ForceReplyMarkup; reply_to_message_id?: number },
   ): Promise<{ message_id: number }>;
+  sendRichMessage(
+    chatId: number,
+    markdown: string,
+    opts?: { reply_markup?: InlineKeyboardMarkup },
+  ): Promise<{ message_id: number }>;
   editMessageText(
     chatId: number,
     messageId: number,
-    text: string,
-    opts?: { reply_markup?: InlineKeyboardMarkup },
+    text: string | undefined,
+    opts?: { reply_markup?: InlineKeyboardMarkup; rich_message?: { markdown: string; is_rtl?: boolean } },
   ): Promise<unknown>;
   answerCallbackQuery(callbackQueryId: string, opts?: { text?: string; show_alert?: boolean }): Promise<unknown>;
   deleteMessage(chatId: number, messageId: number): Promise<unknown>;
