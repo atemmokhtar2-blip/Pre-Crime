@@ -159,21 +159,16 @@ export function screenSettings(gid: number): Screen {
 }
 
 export function screenGeneral(settings: GroupSettings, botName: string, gid: number): Screen {
-  const lang = settings.general.language === "ar" ? "العربية" : "English";
   return {
     text:
-      `🌐 ${SECTION_TITLES.general}\n\n` +
-      `اسم البوت: ${botName}\n` +
-      `اللغة: ${lang}\n` +
-      `المنطقة الزمنية: ${settings.general.timezone}\n\n` +
-      `اضغط على اللغة لتبديلها:`,
-    keyboard: [
-      [{ text: `🌐 اللغة: ${lang}`, callback_data: encodeCallback("lang", gid) }],
-      [groupBack(gid)],
-    ],
+      `🌐 ${SECTION_TITLES.general}\\n\\n` +
+      `اسم البوت: ${botName}\\n` +
+      `لغة الواجهة: العربية\\n` +
+      `المنطقة الزمنية: ${settings.general.timezone}\\n\\n` +
+      `إعداد تغيير اللغة غير متاح بعد.`,
+    keyboard: [[groupBack(gid)]],
   };
 }
-
 // ---------- Protection ----------
 
 function toggleButton(defKey: string, gid: number, emoji: string, name: string, hint: string, state: string): InlineKeyboardButton {
