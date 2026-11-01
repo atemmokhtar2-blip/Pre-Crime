@@ -69,7 +69,7 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
 
   if (data === "pc:guide") {
     await edit(
-      "📘 طريقة تفعيل PRE-CRIME\\n\\n1) أضف البوت إلى مجموعتك.\\n2) ارفعه إلى مشرف.\\n3) فعّل صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين.\\n4) اضغط «فحص الجاهزية» للتأكد من الصلاحيات.\\n\\nملاحظة: ميزات الحماية المتقدمة ستظهر بعد تفعيلها في مراحل التطوير التالية.",
+      "📘 طريقة تفعيل PRE-CRIME\n\n1) أضف البوت إلى مجموعتك.\n2) ارفعه إلى مشرف.\n3) فعّل صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين.\n4) اضغط «فحص الجاهزية» للتأكد من الصلاحيات.\n\nملاحظة: ميزات الحماية المتقدمة ستظهر بعد تفعيلها في مراحل التطوير التالية.",
       [[{ text: "🔎 فحص الجاهزية", callback_data: "pc:check" }], [{ text: "↩️ رجوع", callback_data: "pc:home" }]],
     );
     await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id });
@@ -83,7 +83,7 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
       [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }],
     ];
     await edit(
-      "🛡️ PRE-CRIME\\n\\nمساعدك لإدارة وحماية مجموعات تيليجرام.\\nأضفني إلى مجموعتك، ثم اتبع خطوات التفعيل وفحص الصلاحيات.",
+      "🛡️ PRE-CRIME\n\nمساعدك لإدارة وحماية مجموعات تيليجرام.\nأضفني إلى مجموعتك، ثم اتبع خطوات التفعيل وفحص الصلاحيات.",
       keyboard,
     );
     await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id });
@@ -114,13 +114,13 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
 
     const { isAdmin, missing, ready } = evaluateBotPermissions(botMember);
     const report = ready
-      ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\\n\\nملاحظة: ده فحص للصلاحيات فقط، وليس تأكيدًا لتفعيل كل أنظمة الحماية المتقدمة."
-      : "⚠️ البوت غير جاهز بالكامل.\\n" +
-        (!isAdmin ? "• ارفع PRE-CRIME إلى مشرف.\\n" : "") +
-        (missing.length ? "• فعّل الصلاحيات التالية: " + missing.join("، ") + ".\\n" : "") +
-        "\\nبعد تعديل الصلاحيات أعد الفحص.";
+      ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\n\nملاحظة: ده فحص للصلاحيات فقط، وليس تأكيدًا لتفعيل كل أنظمة الحماية المتقدمة."
+      : "⚠️ البوت غير جاهز بالكامل.\n" +
+        (!isAdmin ? "• ارفع PRE-CRIME إلى مشرف.\n" : "") +
+        (missing.length ? "• فعّل الصلاحيات التالية: " + missing.join("، ") + ".\n" : "") +
+        "\nبعد تعديل الصلاحيات أعد الفحص.";
     await edit(
-      "🛡️ تقرير جاهزية PRE-CRIME\\n\\n" + report,
+      "🛡️ تقرير جاهزية PRE-CRIME\n\n" + report,
       [[{ text: "🔄 إعادة الفحص", callback_data: "pc:check" }], [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }]],
     );
     await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: ready ? "الفحص اكتمل: الصلاحيات الأساسية متاحة." : "تم الفحص: البوت يحتاج إلى استكمال الإعدادات." });
