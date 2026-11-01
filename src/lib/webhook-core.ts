@@ -32,6 +32,7 @@ import { toggleByKey, findToggle } from "./toggles";
 import { defaultSettings, resetSection, type ResetSectionKey } from "./settings";
 import { resolveRole, canOpenPanel, buildPermissionChecks, type PermissionChecks } from "./permissions";
 import { evaluateProtection, extractSignal, VIOLATION_LABELS, type ViolationKind } from "./protection";
+import { shouldDeleteImage } from "./engines/media-engine";
 import { buildGoodbyeMessage, buildWelcomeMessage, memberLabel } from "./messages";
 import { BRAND, DEFAULT_REASON } from "./constants";
 import type {
@@ -427,7 +428,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     // Content cleanup filter (explicit, independent of anti-* toggles)
     const cf = settings.messages.contentFilter;
     let deleteNow = false;
-    if (cf.media && signal.hasMedia) deleteNow = true;
+    // The image toggle only removes standalone photos; captions and other media stay untouched.\n    if (cf.media && shouldDeleteImage(message)) deleteNow = true;
     if (cf.files && signal.hasDocument) deleteNow = true;
     if (cf.text && signal.text.trim().length > 0 && !signal.hasUrl && !signal.hasMedia && !signal.hasDocument) {
       // "text" filter removes text-only junk when enabled (opt-in rule)
