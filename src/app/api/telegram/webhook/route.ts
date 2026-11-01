@@ -135,8 +135,8 @@ export async function POST(request: Request) {
       if (addedToGroup && membership?.chat?.id) {
         const groupName = membership.chat.title?.trim();
         const groupGreeting = groupName
-          ? `أهلاً بأعضاء مجموعة ${groupName} 👋\\n\\n`
-          : "أهلاً يا جماعة 👋\\n\\n";
+          ? `أهلاً بأعضاء مجموعة ${groupName} 👋\n\n`
+          : "أهلاً يا جماعة 👋\n\n";
         console.info("telegram_bot_added_to_group", {
           chatId: membership.chat.id,
           chatType: membership.chat.type,
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
           chat_id: membership.chat.id,
           text:
             groupGreeting +
-            "أنا PRE-CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\\n" +
+            "أنا PRE-CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\n" +
             "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء وإدارة المجموعة، وبعدها هأكد لكم إنّي جاهز للعمل.",
           disable_web_page_preview: true,
         });
