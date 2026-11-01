@@ -30,7 +30,7 @@ import {
 } from "./screens";
 import { toggleByKey } from "./toggles";
 import { defaultSettings, resetSection, type ResetSectionKey } from "./settings";
-import { resolveRole, canOpenPanel, buildPermissionChecks } from "./permissions";
+import { resolveRole, canOpenPanel, buildPermissionChecks, type PermissionChecks } from "./permissions";
 import { evaluateProtection, extractSignal, VIOLATION_LABELS, type RecentEvent, type ViolationKind } from "./protection";
 import { buildGoodbyeMessage, buildWelcomeMessage, memberLabel } from "./messages";
 import { BRAND, DEFAULT_REASON } from "./constants";
@@ -585,7 +585,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       case "toggle": {
         const key = parsed.args[0];
-        if (!key) break;
+        if (!key) { await ack(update.id, "الزر غير معروف.", true); return; }
+        if (!mayToggle(key, checks)) { await ack(update.id, "غير مصرح لك بتغيير هذا الإعداد.", true); return; }
         const next = toggleByKey(settings, key);
         await repo.setSettings(gid, next);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", key, {});
@@ -595,20 +596,20 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "words": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         await editScreen(chatId, messageId, screenWordFilter(settings, gid));
         await ack(update.id);
         return;
       }
       case "words_add": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         await repo.setPending({ chat_id: chatId, group_id: gid, action: "add_words", context: {} });
         await bot.sendMessage(chatId, "📝 أرسل الكلمات المحظورة الآن (افصل بينها بفواصل):", { reply_markup: { force_reply: true, input_field_placeholder: "كلمة1, كلمة2" } });
         await ack(update.id);
         return;
       }
       case "words_clear": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         settings.protection.wordFilter.words = [];
         await repo.setSettings(gid, settings);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", "wordFilter", { cleared: true });
@@ -617,20 +618,20 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "whitelist": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         await editScreen(chatId, messageId, screenWhitelist(settings, gid));
         await ack(update.id);
         return;
       }
       case "whitelist_add": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         await repo.setPending({ chat_id: chatId, group_id: gid, action: "add_whitelist", context: {} });
         await bot.sendMessage(chatId, "🔗 أرسل النطاق المسموح (مثل example.com):", { reply_markup: { force_reply: true, input_field_placeholder: "example.com" } });
         await ack(update.id);
         return;
       }
       case "whitelist_clear": {
-        if (!checks.canProtection) break;
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         settings.protection.antiLinks.whitelist = [];
         await repo.setSettings(gid, settings);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", "antiLinks", { cleared: true });
@@ -651,7 +652,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       case "member": {
         const targetId = Number(parsed.args[0]);
-        if (!Number.isSafeInteger(targetId)) break;
+        if (!Number.isSafeInteger(targetId)) { await ack(update.id, "تعذر تحديد العضو.", true); return; }
         const member = await repo.getMember(gid, targetId);
         const fallback: MemberRow = {
           chat_id: gid, telegram_user_id: targetId, username: null, display_name: String(targetId), status: "member",
@@ -664,7 +665,14 @@ export function createWebhookHandler(deps: WebhookDeps) {
       case "act": {
         const action = parsed.args[0];
         const targetId = Number(parsed.args[1]);
-        if (!Number.isSafeInteger(targetId) || !action) break;
+        const origin = parsed.args[2] ?? "";
+        if (!Number.isSafeInteger(targetId) || !action) { await ack(update.id, "تعذر تحديد العضو أو الإجراء.", true); return; }
+        if (action === "ban" || action === "kick" || action === "unban") {
+          if (!checks.canBan) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
+        }
+        if (action === "mute" || action === "unmute" || action === "unwarn") {
+          if (!checks.canMute) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
+        }
         const member = await repo.getMember(gid, targetId);
         const targetName = memberLabel(member?.display_name || null, member?.username ?? null, targetId);
         const needsReason = action === "warn" || action === "ban" || action === "kick";
@@ -679,14 +687,19 @@ export function createWebhookHandler(deps: WebhookDeps) {
           return;
         }
         await executeMemberAction(gid, chatId, targetId, action, DEFAULT_REASON, actorId, actorName);
-        const refreshed = await repo.getMember(gid, targetId) ?? member;
-        const fallback: MemberRow = { chat_id: gid, telegram_user_id: targetId, username: null, display_name: targetName, status: "member", joined_at: null, last_seen_at: null, message_count: 0, warning_count: 0, warned: false };
-        await editScreen(chatId, messageId, screenMemberDetail(refreshed ?? fallback, gid, role, checks, false));
+        if (origin === "banned") {
+          const banned = await repo.listBanned(gid);
+          await editScreen(chatId, messageId, screenBanned(banned, gid));
+        } else {
+          const refreshed = await repo.getMember(gid, targetId) ?? member;
+          const fallback: MemberRow = { chat_id: gid, telegram_user_id: targetId, username: null, display_name: targetName, status: "member", joined_at: null, last_seen_at: null, message_count: 0, warning_count: 0, warned: false };
+          await editScreen(chatId, messageId, screenMemberDetail(refreshed ?? fallback, gid, role, checks, false));
+        }
         await ack(update.id, "تم التنفيذ ✅");
         return;
       }
       case "banned": {
-        if (!checks.canBan && role !== "moderator") break;
+        if (!checks.canBan) { await ack(update.id, "غير مصرح لك بمشاهدة المحظورين.", true); return; }
         const banned = await repo.listBanned(gid);
         await editScreen(chatId, messageId, screenBanned(banned, gid));
         await ack(update.id);
@@ -740,7 +753,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "cleanup": {
-        if (!checks.canMessages) break;
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بتعديل الرسائل.", true); return; }
         const order = ["none", "links", "media", "files"];
         const idx = order.indexOf(settings.messages.cleanup);
         settings.messages.cleanup = order[(idx + 1) % order.length] as GroupSettings["messages"]["cleanup"];
@@ -751,7 +764,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "contentfilter": {
-        if (!checks.canMessages) break;
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بتعديل الرسائل.", true); return; }
         const target = parsed.args[0];
         if (target === "media") settings.messages.contentFilter.media = !settings.messages.contentFilter.media;
         else if (target === "files") settings.messages.contentFilter.files = !settings.messages.contentFilter.files;
@@ -767,14 +780,14 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "tpl_add": {
-        if (!checks.canMessages) break;
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بتعديل الرسائل.", true); return; }
         await repo.setPending({ chat_id: chatId, group_id: gid, action: "add_template", context: {} });
         await bot.sendMessage(chatId, "📝 أرسل النص الجديد للقالب:", { reply_markup: { force_reply: true, input_field_placeholder: "نص القالب..." } });
         await ack(update.id);
         return;
       }
       case "tpl_del": {
-        if (!checks.canMessages) break;
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بتعديل الرسائل.", true); return; }
         const index = Number(parsed.args[0]);
         if (Number.isInteger(index) && settings.messages.templates[index]) {
           settings.messages.templates.splice(index, 1);
@@ -904,6 +917,14 @@ export function createWebhookHandler(deps: WebhookDeps) {
         await ack(update.id, "الزر غير معروف.");
       }
     }
+  }
+
+  // Restricts which toggles an actor may flip. Owners and bot admins change
+  // everything; moderators only what their delegated capabilities allow.
+  function mayToggle(key: string, checks: PermissionChecks): boolean {
+    if (key.startsWith("pm_") || key.startsWith("n_")) return checks.canSettings;
+    if (["welcome", "goodbye", "verify", "blockuntrusted", "newmember"].includes(key)) return checks.canSettings;
+    return checks.canProtection;
   }
 
   // Renders the right screen after a toggle, routing back to the originating section.

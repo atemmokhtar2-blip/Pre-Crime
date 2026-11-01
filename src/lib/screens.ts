@@ -123,7 +123,7 @@ export function screenPanel(groupTitle: string, gid: number): Screen {
       `اختر القسم الذي تريد إدارته:`,
     keyboard: [
       [
-        { text: `👥 الأعضاء`, callback_data: encodeCallback("members", gid) },
+        { text: `👥 الأعضاء`, callback_data: encodeCallback("memberlist", gid) },
         { text: `🛡️ الحماية`, callback_data: encodeCallback("protection", gid) },
       ],
       [
@@ -230,7 +230,7 @@ export function screenMembersSettings(settings: GroupSettings, gid: number): Scr
   const rows: InlineKeyboardButton[][] = MEMBER_TOGGLES.map((t) => [
     toggleButton(t.key, gid, toggleStateEmoji(settings, t.key), t.name, t.hint, toggleStateLabel(settings, t.key)),
   ]);
-  rows.push([{ text: "👥 قائمة الأعضاء", callback_data: encodeCallback("members", gid) }]);
+  rows.push([{ text: "👥 قائمة الأعضاء", callback_data: encodeCallback("memberlist", gid) }]);
   rows.push([groupBack(gid)]);
   return {
     text: `👥 ${SECTION_TITLES.members}\n\nالتحكم الكامل في الأعضاء داخل المجموعة:`,
@@ -241,7 +241,7 @@ export function screenMembersSettings(settings: GroupSettings, gid: number): Scr
 export function screenMemberList(members: MemberRow[], gid: number, note?: string): Screen {
   const rows: InlineKeyboardButton[][] = [];
   if (members.length === 0) {
-    rows.push([{ text: "لا يوجد أعضاء مسجلون بعد", callback_data: encodeCallback("members", gid) }]);
+    rows.push([{ text: "لا يوجد أعضاء مسجلون بعد", callback_data: encodeCallback("panel", gid) }]);
   } else {
     for (const m of members) {
       const label = `${memberLabel(m.display_name || null, m.username, m.telegram_user_id)}${m.status === "banned" ? " (محظور)" : ""}`;
@@ -299,7 +299,7 @@ export function screenMemberDetail(
   if (member.warning_count > 0 && checks.canMute) {
     rows.push([{ text: "🧹 إزالة التحذيرات", callback_data: encodeCallback("act", gid, ["unwarn", member.telegram_user_id]) }]);
   }
-  rows.push([back("members", gid)]);
+  rows.push([back("memberlist", gid)]);
   rows.push([groupBack(gid)]);
 
   return {
@@ -319,7 +319,7 @@ export function screenMemberDetail(
 
 export function screenBanned(members: MemberRow[], gid: number): Screen {
   const rows: InlineKeyboardButton[][] = members.map((m) => [
-    { text: `${memberLabel(m.display_name || null, m.username, m.telegram_user_id)} — فك الحظر`, callback_data: encodeCallback("act", gid, ["unban", m.telegram_user_id]) },
+    { text: `${memberLabel(m.display_name || null, m.username, m.telegram_user_id)} — فك الحظر`, callback_data: encodeCallback("act", gid, ["unban", m.telegram_user_id, "banned"]) },
   ]);
   if (!members.length) rows.push([{ text: "لا يوجد أعضاء محظورون 🎉", callback_data: encodeCallback("panel", gid) }]);
   rows.push([groupBack(gid)]);
