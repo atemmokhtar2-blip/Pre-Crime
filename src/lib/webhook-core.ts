@@ -271,9 +271,12 @@ export function createWebhookHandler(deps: WebhookDeps) {
       const safeReason = escapeMarkdown(reasonLabel);
       const warningMarkdown =
         `# ⚠️ تحذير المستخدم\n\n` +
-        `👤 **العضو:** [${safeName}](tg://user?id=${userId})\n` +
-        `📌 **السبب:** ${safeReason}\n` +
-        `🔢 **عدد التحذيرات:** **${count}**`;
+        `👤 **العضو**\n` +
+        `[ ${safeName} ](tg://user?id=${userId})\n\n` +
+        `📌 **السبب**\n` +
+        `${safeReason}\n\n` +
+        `🔢 **عدد التحذيرات**\n` +
+        `**${count}**`;
       try {
         await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
@@ -284,7 +287,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            `⚠️ تحذير المستخدم\n\n👤 العضو: ${targetName}\n📌 السبب: ${reasonLabel}\n🔢 عدد التحذيرات: ${count}`,
+            `⚠️ تحذير المستخدم\n\n👤 العضو\n${targetName}\n\n📌 السبب\n${reasonLabel}\n\n🔢 عدد التحذيرات\n${count}`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
