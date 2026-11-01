@@ -27,6 +27,13 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
     async getMe() {
       return call<{ id: number; username?: string; first_name?: string }>("getMe");
     },
+    async sendRichMessage(chatId, markdown, opts) {
+      return call<{ message_id: number }>("sendRichMessage", {
+        chat_id: chatId,
+        rich_message: { markdown, is_rtl: true },
+        ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {}),
+      });
+    },
     async sendMessage(chatId, text, opts) {
       const body: Record<string, unknown> = { chat_id: chatId, text, disable_web_page_preview: true };
       if (opts?.reply_markup) body.reply_markup = opts.reply_markup;
@@ -37,9 +44,10 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       const body: Record<string, unknown> = {
         chat_id: chatId,
         message_id: messageId,
-        text,
         disable_web_page_preview: true,
       };
+      if (text !== undefined) body.text = text;
+      if (opts?.rich_message) body.rich_message = opts.rich_message;
       if (opts?.reply_markup) body.reply_markup = opts.reply_markup;
       return call<unknown>("editMessageText", body);
     },
