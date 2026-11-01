@@ -30,7 +30,7 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
     async sendRichMessage(chatId, markdown, opts) {
       return call<{ message_id: number }>("sendRichMessage", {
         chat_id: chatId,
-        rich_message: { markdown },
+        rich_message: { markdown, is_rtl: true },
         ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {}),
       });
     },
