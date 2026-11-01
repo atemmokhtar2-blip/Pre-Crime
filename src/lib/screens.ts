@@ -661,7 +661,7 @@ export function screenStats(stats: GroupStats, gid: number): Screen {
       `🚫 عدد الحظر: ${stats.banCount}\n` +
       `🔇 عدد الكتم: ${stats.muteCount}\n` +
       `📋 أحداث السجل: ${stats.auditCount}\n` +
-      `🛡️ أنظمة الحماية المفعّلة: ${stats.enabledProtection}/${Object.keys(protection).length + 0}\n` +
+      `🛡️ أنظمة الحماية المفعّلة: ${stats.enabledProtection}/${PROTECTION_TOGGLES.filter((t) => t.kind === "boolean").length}\n` +
       `🔎 جاهزية البوت: ${stats.botReady ? "جاهز ✅" : "غير مكتمل ⚠️"}\n\n` +
       FOOTER,
     keyboard: [[{ text: "🔄 تحديث", callback_data: encodeCallback("stats", gid) }], [groupBack(gid)]],

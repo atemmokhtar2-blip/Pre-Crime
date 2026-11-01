@@ -570,7 +570,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "lang": {
-        if (!checks.canSettings) break;
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         settings.general.language = settings.general.language === "ar" ? "en" : "ar";
         await repo.setSettings(gid, settings);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", "language", { value: settings.general.language });
@@ -791,13 +791,13 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "notif_target": {
-        if (!checks.canSettings) break;
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         await editScreen(chatId, messageId, screenNotificationTargets(settings, gid));
         await ack(update.id);
         return;
       }
       case "notif_target_cycle": {
-        if (!checks.canSettings) break;
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         const key = parsed.args[0] as keyof GroupSettings["notifications"];
         const order = ["group", "owner_pm", "admins"] as const;
         if (settings.notifications[key]) {
@@ -824,14 +824,14 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "add_admin": {
-        if (!checks.canSettings) break;
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         await repo.setPending({ chat_id: chatId, group_id: gid, action: "add_admin", context: {} });
         await bot.sendMessage(chatId, "➕ أرسل المعرّف الرقمي (ID) للشخص الذي تريد تعيينه مديرًا للبوت:", { reply_markup: { force_reply: true, input_field_placeholder: "123456789" } });
         await ack(update.id);
         return;
       }
       case "remove_admin": {
-        if (!checks.canSettings) break;
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         if (!settings.permissions.botAdmins.length) {
           await ack(update.id, "لا يوجد مديرو بوت مسجلون.", true);
           return;
@@ -856,7 +856,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "loglist": {
-        if (!checks.canLogs) break;
+        if (!checks.canLogs) { await ack(update.id, "غير مصرح لك بمشاهدة السجلات.", true); return; }
         const kind = parsed.args[0] ?? "all";
         const events = await repo.listAudit(gid, undefined, 100);
         await editScreen(chatId, messageId, screenLogList(events, gid, kind));
@@ -864,7 +864,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "logdetail": {
-        if (!checks.canLogs) break;
+        if (!checks.canLogs) { await ack(update.id, "غير مصرح لك بمشاهدة السجلات.", true); return; }
         const id = Number(parsed.args[0]);
         const events = await repo.listAudit(gid, undefined, 200);
         const row = events.find((e) => e.id === id);
