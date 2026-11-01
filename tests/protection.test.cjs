@@ -97,3 +97,24 @@ test("fuzzy matching catches one-character typo in longer custom words without b
   assert.deepEqual(evaluateProtection(enabled, signal("شرموطه"), [], 1000), ["word"]);
   assert.deepEqual(evaluateProtection(enabled, signal("الشرموطية؟"), [], 1000), []);
 });
+
+
+test("detects repeated-letter evasion and adjacent transposition", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: ["شرموط"] } });
+  const signal = (text) => ({ text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false });
+  assert.deepEqual(evaluateProtection(enabled, signal("شــــرررمووووط"), [], 1000), ["word"]);
+  assert.deepEqual(evaluateProtection(enabled, signal("شرموت"), [], 1000), ["word"]);
+});
+
+test("matches multi-word abusive phrases as consecutive words", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: ["يا ابن الكلب"] } });
+  const signal = { text: "انت يا ابن الكلب اسكت", hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false };
+  assert.deepEqual(evaluateProtection(enabled, signal, [], 1000), ["word"]);
+});
+
+test("does not fuzzy-match short or unrelated ordinary words", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: ["كسمك"] } });
+  const signal = (text) => ({ text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false });
+  assert.deepEqual(evaluateProtection(enabled, signal("مساكم جميل"), [], 1000), []);
+  assert.deepEqual(evaluateProtection(enabled, signal("كلام جميل"), [], 1000), []);
+});
