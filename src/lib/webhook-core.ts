@@ -71,11 +71,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
   }
 
   function richLayout(text: string): string {
-    // Screen copy is authored with real newline characters. Never split on the
-    // two-character sequence "\\n" or it leaks visibly into Telegram.
-    const lines = text.replace(/\\r\\n?/g, "\\n").split("\\n");
+    // Normalize real line breaks before converting plain screen copy to Rich Markdown.
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
     const first = (lines.shift() ?? "").trim();
-    const output: string[] = first ? [`# ${first}`, ""] : [];
+    const output: string[] = first ? ["# " + first, ""] : [];
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line) {
@@ -87,17 +86,17 @@ export function createWebhookHandler(deps: WebhookDeps) {
         output.push("---", "");
         continue;
       }
-      if (/^•\\s+/.test(line)) {
-        output.push("- " + line.replace(/^•\\s+/, ""));
+      if (/^•\s+/.test(line)) {
+        output.push("- " + line.replace(/^•\s+/, ""));
         continue;
       }
-      if (/^(?:📊|🛡️|👥|💬|⚠️|🔔|📨|🔗|🔤|📝|⚙️|🌐|🚫|📋|👮|🤖)\\s/.test(line)) {
-        output.push(`## ${line}`);
+      if (/^(?:📊|🛡️|👥|💬|⚠️|🔔|📨|🔗|🔤|📝|⚙️|🌐|🚫|📋|👮|🤖)\s/.test(line)) {
+        output.push("## " + line);
         continue;
       }
       output.push(rawLine);
     }
-    return output.join("\\n").replace(/\\n{3,}/g, "\\n\\n").trim();
+    return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
   function styledKeyboard(keyboard: InlineKeyboardButton[][]): InlineKeyboardButton[][] {
