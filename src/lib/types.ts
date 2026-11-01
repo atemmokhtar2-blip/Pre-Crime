@@ -151,9 +151,9 @@ export interface BotApi {
 }
 
 export type InlineKeyboardButton =
-  | { text: string; callback_data: string }
-  | { text: string; url: string }
-  | { text: string; switch_inline_query_current_chat: string };
+  | { text: string; callback_data: string; style?: "primary" | "success" | "danger"; icon_custom_emoji_id?: string }
+  | { text: string; url: string; style?: "primary" | "success" | "danger"; icon_custom_emoji_id?: string }
+  | { text: string; switch_inline_query_current_chat: string; style?: "primary" | "success" | "danger"; icon_custom_emoji_id?: string };
 
 export type InlineKeyboardMarkup = { inline_keyboard: InlineKeyboardButton[][] };
 export type ForceReplyMarkup = { force_reply: true; input_field_placeholder?: string };
