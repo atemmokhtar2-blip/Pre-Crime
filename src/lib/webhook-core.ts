@@ -70,15 +70,46 @@ export function createWebhookHandler(deps: WebhookDeps) {
     }
   }
 
-  async function editScreen(chatId: number, messageId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
+  function richLayout(text: string): string {
+    const lines = text.split("\\n");
+    const first = lines.shift()?.trim() ?? "";
+    const body = lines.map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+      if (/^[━─—-]{3,}$/.test(trimmed)) return "---";
+      if (trimmed.startsWith("• ")) return "- " + trimmed.slice(2);
+      return line;
+    }).join("\\n");
+    return `# ${first}\\n\\n${body}`.trim();
+  }
+
+  async function sendRichScreen(chatId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
+    const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
     try {
-      await bot.editMessageText(chatId, messageId, screen.text, screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined);
+      await bot.sendRichMessage(chatId, richLayout(screen.text), markup);
     } catch (error) {
-      console.error("telegram_edit_message_failed", { chatId, messageId, error: error instanceof Error ? error.message : String(error) });
+      console.error("telegram_rich_send_fallback", { chatId, error: error instanceof Error ? error.message : String(error) });
+      await bot.sendMessage(chatId, screen.text, markup);
+    }
+  }
+
+  async function editScreen(chatId: number, messageId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
+    const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
+    try {
+      await bot.editMessageText(chatId, messageId, undefined, {
+        rich_message: { markdown: richLayout(screen.text), is_rtl: true },
+        ...(markup ?? {}),
+      });
+    } catch (error) {
+      console.error("telegram_rich_edit_fallback", { chatId, messageId, error: error instanceof Error ? error.message : String(error) });
       try {
-        await bot.sendMessage(chatId, screen.text, screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined);
-      } catch (sendError) {
-        console.error("telegram_fallback_message_failed", { chatId, error: sendError instanceof Error ? sendError.message : String(sendError) });
+        await bot.editMessageText(chatId, messageId, screen.text, markup);
+      } catch {
+        try {
+          await sendRichScreen(chatId, screen);
+        } catch (sendError) {
+          console.error("telegram_fallback_message_failed", { chatId, error: sendError instanceof Error ? sendError.message : String(sendError) });
+        }
       }
     }
   }
@@ -470,7 +501,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
           keyboard.push([{ text: `🛡️ لوحة تحكم: ${g.title}`, callback_data: encodeCallback("panel", g.chat_id) }]);
         }
       }
-      await bot.sendMessage(chatId, home.text, { reply_markup: { inline_keyboard: keyboard } });
+      await sendRichScreen(chatId, { ...home, keyboard });
       return;
     }
     // In a group, offer the readiness check.
