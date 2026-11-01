@@ -243,7 +243,16 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (action === "warn") {
       const count = await repo.addWarning(gid, userId, 0, base);
       await repo.addAudit(gid, 0, actorLabel, "warn", targetName, { reason: base, automatic: true, count });
-      await deliverNotification(gid, "violations", `⚠️ تم تحذير ${targetName} آليًا (${count}) بسبب: ${base}`);
+      // Automatic warnings belong in the moderated group, not the bot private chat.
+      try {
+        await bot.sendMessage(gid, `⚠️ تحذير للمستخدم: ${targetName}\nالسبب: ${base}\nعدد التحذيرات: ${count}`);
+      } catch (error) {
+        console.error("telegram_group_warning_failed", {
+          chatId: gid,
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       const limit = settings.protection.punishment.warningsBeforeAction;
       if (count >= limit && limit > 0) {
         try {
