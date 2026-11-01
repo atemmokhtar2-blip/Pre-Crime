@@ -73,3 +73,27 @@ test("custom phrases are normalized but harmless words are not broadly blocked",
   assert.deepEqual(evaluateProtection(enabled, signal("اهانة"), [], 1000), ["word"]);
   assert.deepEqual(evaluateProtection(enabled, signal("الاهتمام بالتعليم"), [], 1000), []);
 });
+
+
+test("detects Arabizi and digit substitutions", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: [] } });
+  for (const text of ["ksmk", "كسمك", "كُسْمَك"]) {
+    const result = evaluateProtection(enabled, { text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
+    assert.deepEqual(result, ["word"], text);
+  }
+});
+
+test("detects punctuation and short-separator obfuscation", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: [] } });
+  for (const text of ["ك س م ك", "كـسـمـك", "ك*س*م*ك"]) {
+    const result = evaluateProtection(enabled, { text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
+    assert.deepEqual(result, ["word"], text);
+  }
+});
+
+test("fuzzy matching catches one-character typo in longer custom words without broad substring blocking", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: ["شرموط"] } });
+  const signal = (text) => ({ text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false });
+  assert.deepEqual(evaluateProtection(enabled, signal("شرموطه"), [], 1000), ["word"]);
+  assert.deepEqual(evaluateProtection(enabled, signal("الشرموطية؟"), [], 1000), []);
+});
