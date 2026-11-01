@@ -35,11 +35,11 @@ export interface Screen {
 }
 
 function back(section: string, gid?: number | null, label = `${EM.back} رجوع`): InlineKeyboardButton {
-  return { text: label, callback_data: encodeCallback(section, gid) };
+  return { text: label, callback_data: encodeCallback(section, gid), style: "primary" };
 }
 
 function groupBack(gid: number, label = `${EM.back} رجوع للوحة التحكم`): InlineKeyboardButton {
-  return back("panel", gid, label);
+  return { ...back("panel", gid, label), style: "primary" };
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -125,16 +125,16 @@ export function screenPanel(groupTitle: string, gid: number): Screen {
       `اختر وحدة الإدارة التي تريد فتحها من الأقسام التالية:`,
     keyboard: [
       [
-        { text: `👥 الأعضاء`, callback_data: encodeCallback("memberlist", gid) },
-        { text: `🛡️ الحماية`, callback_data: encodeCallback("protection", gid) },
+        { text: `👥 الأعضاء`, callback_data: encodeCallback("memberlist", gid), style: "primary" },
+        { text: `🛡️ الحماية`, callback_data: encodeCallback("protection", gid), style: "success" },
       ],
       [
-        { text: `📊 الإحصائيات`, callback_data: encodeCallback("stats", gid) },
-        { text: `💬 الرسائل`, callback_data: encodeCallback("messages", gid) },
+        { text: `📊 الإحصائيات`, callback_data: encodeCallback("stats", gid), style: "primary" },
+        { text: `💬 الرسائل`, callback_data: encodeCallback("messages", gid), style: "primary" },
       ],
       [
-        { text: `🚫 المحظورون`, callback_data: encodeCallback("banned", gid) },
-        { text: `⚙️ الإعدادات`, callback_data: encodeCallback("settings", gid) },
+        { text: `🚫 المحظورون`, callback_data: encodeCallback("banned", gid), style: "danger" },
+        { text: `⚙️ الإعدادات`, callback_data: encodeCallback("settings", gid), style: "primary" },
       ],
       [{ text: `❓ المساعدة`, callback_data: encodeCallback("help", gid) }],
     ],
@@ -177,6 +177,7 @@ function toggleButton(defKey: string, gid: number, emoji: string, name: string, 
   return {
     text: `${emoji} ${name}\n${hint}\n(${state})`,
     callback_data: encodeCallback("toggle", gid, [defKey]),
+    style: state.includes("مفعّل") ? "success" : "primary",
   };
 }
 
@@ -281,20 +282,20 @@ export function screenMemberDetail(
 
   if (checks.canMute) {
     if (member.status === "restricted") {
-      rows.push([{ text: "🔊 إلغاء الكتم", callback_data: encodeCallback("act", gid, ["unmute", member.telegram_user_id]) }]);
+      rows.push([{ text: "🔊 إلغاء الكتم", callback_data: encodeCallback("act", gid, ["unmute", member.telegram_user_id]), style: "success" }]);
     } else {
-      rows.push([{ text: "🔇 كتم", callback_data: encodeCallback("act", gid, ["mute", member.telegram_user_id]) }]);
+      rows.push([{ text: "🔇 كتم", callback_data: encodeCallback("act", gid, ["mute", member.telegram_user_id]), style: "danger" }]);
     }
   }
 
   if (member.status === "banned") {
-    if (checks.canBan) rows.push([{ text: "✅ فك الحظر", callback_data: encodeCallback("act", gid, ["unban", member.telegram_user_id]) }]);
+    if (checks.canBan) rows.push([{ text: "✅ فك الحظر", callback_data: encodeCallback("act", gid, ["unban", member.telegram_user_id]), style: "success" }]);
   } else {
     if (checks.canBan) {
-      rows.push([{ text: "🚫 حظر", callback_data: encodeCallback("act", gid, ["ban", member.telegram_user_id]) }]);
-      rows.push([{ text: "👢 طرد", callback_data: encodeCallback("act", gid, ["kick", member.telegram_user_id]) }]);
+      rows.push([{ text: "🚫 حظر", callback_data: encodeCallback("act", gid, ["ban", member.telegram_user_id]), style: "danger" }]);
+      rows.push([{ text: "👢 طرد", callback_data: encodeCallback("act", gid, ["kick", member.telegram_user_id]), style: "danger" }]);
     }
-    if (checks.canMute) rows.push([{ text: "⚠️ تحذير", callback_data: encodeCallback("act", gid, ["warn", member.telegram_user_id]) }]);
+    if (checks.canMute) rows.push([{ text: "⚠️ تحذير", callback_data: encodeCallback("act", gid, ["warn", member.telegram_user_id]), style: "danger" }]);
   }
 
   if (member.warning_count > 0 && checks.canMute) {
