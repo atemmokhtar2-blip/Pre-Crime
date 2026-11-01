@@ -48,13 +48,14 @@ function normalizeText(value: string): string {
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
     .replace(/[أإآٱ]/g, "ا").replace(/ؤ/g, "و").replace(/ئ/g, "ي")
     .replace(/ى/g, "ي").replace(/ة/g, "ه")
-    .replace(/[پ]/g, "ب").replace(/[ڤ]/g, "ف").replace(/[گ]/g, "ك");
+    .replace(/[پ]/g, "ب").replace(/[ڤ]/g, "ف").replace(/[گک]/g, "ك")
+    .replace(/[ی]/g, "ي")
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 }
 
 function normalizeObfuscation(value: string): string {
   return normalizeText(value)
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
     .replace(/3/g, "ع").replace(/7/g, "ح").replace(/8/g, "ق").replace(/9/g, "ص")
     .replace(/[|!$]/g, "");
 }
@@ -72,66 +73,71 @@ function foldLatinArabizi(value: string): string {
     .replace(/e/g, "ي").replace(/o/g, "و").replace(/u/g, "و");
 }
 
-function compactText(value: string): string {
-  return normalizeObfuscation(value).replace(/[^\p{L}\p{N}]+/gu, "");
+function squeezeRepeats(value: string): string {
+  return value.replace(/(.)\1{2,}/gu, "$1$1");
+}
+
+function normalizeForMatch(value: string): string {
+  return squeezeRepeats(foldLatinArabizi(value))
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim().replace(/\s+/g, " ");
 }
 
 function tokens(value: string): string[] {
-  return normalizeObfuscation(value).match(/[\p{L}\p{N}]+/gu) ?? [];
+  const normalized = normalizeForMatch(value);
+  return normalized ? normalized.split(" ") : [];
 }
 
 const BUILTIN_BLOCKED_WORDS = [
   "كسمك", "كسم", "كس امك", "كس ام", "كس اختك", "كسختك",
   "شرموط", "شرموطه", "شراميط", "متناك", "متناكه", "منيوك", "منيوكه",
   "خول", "خولات", "عرص", "قحبه", "قحاب", "لبوه", "طيز", "زبر",
-  "نيك", "انيك", "ينك", "يا ابن الكلب", "ابن الكلب", "كلب", "حيوان",
+  "نيك", "انيك", "ينك", "يا ابن الكلب", "ابن الكلب",
 ];
 
-function editDistanceAtMostOne(a: string, b: string): boolean {
+function damerauLevenshteinAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0, j = 0, edits = 0;
   while (i < a.length && j < b.length) {
     if (a[i] === b[j]) { i++; j++; continue; }
     if (++edits > 1) return false;
-    if (a.length > b.length) i++;
-    else if (b.length > a.length) j++;
-    else { i++; j++; }
+    if (a.length === b.length) {
+      if (i + 1 < a.length && a[i] === b[j + 1] && a[i + 1] === b[j]) { i += 2; j += 2; }
+      else { i++; j++; }
+    } else if (a.length > b.length) i++;
+    else j++;
   }
   if (i < a.length || j < b.length) edits++;
   return edits <= 1;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
-}
-
 function separatorObfuscationMatch(message: string, word: string): boolean {
   const chars = [...word];
   if (chars.length < 3) return false;
-  const pattern = chars.map(escapeRegExp).join("[\\s\\p{P}\\p{S}ـ]{0,2}");
-  return new RegExp(pattern, "u").test(normalizeText(message));
+  const pattern = chars.map((c) => c.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"))
+    .join("[\\s\\p{P}\\p{S}ـ]{0,2}");
+  return new RegExp("(^|[^\\p{L}\\p{N}])" + pattern + "($|[^\\p{L}\\p{N}])", "u")
+    .test(normalizeText(message));
 }
 
 function containsBlockedWord(message: string, customWords: string[]): boolean {
-  const normalizedTokens = tokens(message).map((token) => foldLatinArabizi(token));
-  const compact = compactText(message);
+  const messageTokens = tokens(message);
   const candidates = [...BUILTIN_BLOCKED_WORDS, ...customWords]
-    .map((word) => compactText(word))
+    .map((word) => normalizeForMatch(word))
     .filter((word) => word.length >= 3);
 
   for (const candidate of candidates) {
-    const forms = [candidate, foldLatinArabizi(candidate)];
-    for (const form of forms) {
-      if (!form) continue;
-      if (normalizedTokens.some((token) => token === form)) return true;
-      if (separatorObfuscationMatch(message, form)) return true;
-      if (compact === form) return true;
-    }
-  }
-
-  for (const token of normalizedTokens) {
-    for (const candidate of candidates) {
-      if (candidate.length >= 5 && token.length >= 5 && editDistanceAtMostOne(token, candidate)) return true;
+    const candidateTokens = candidate.split(" ");
+    if (candidateTokens.length > 1) {
+      for (let i = 0; i <= messageTokens.length - candidateTokens.length; i++) {
+        if (candidateTokens.every((part, j) => messageTokens[i + j] === part)) return true;
+      }
+    } else {
+      if (messageTokens.includes(candidate)) return true;
+      if (separatorObfuscationMatch(message, candidate)) return true;
+      if (candidate.length >= 5 && messageTokens.some((token) =>
+        token.length >= 5 && damerauLevenshteinAtMostOne(token, candidate))) return true;
     }
   }
   return false;
