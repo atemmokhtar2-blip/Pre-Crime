@@ -110,7 +110,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
   }
 
   async function sendRichScreen(chatId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
-    const keyboard = styledKeyboard(screen.keyboard);\n    const markup = keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined;
+    const keyboard = styledKeyboard(screen.keyboard);
+    const markup = keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined;
     try {
       await bot.sendRichMessage(chatId, richLayout(screen.text), markup);
     } catch (error) {
@@ -120,7 +121,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
   }
 
   async function editScreen(chatId: number, messageId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
-    const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
+    const keyboard = styledKeyboard(screen.keyboard);
+    const markup = keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined;
     try {
       await bot.editMessageText(chatId, messageId, undefined, {
         rich_message: { markdown: richLayout(screen.text), is_rtl: true },
