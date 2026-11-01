@@ -135,7 +135,8 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
 
   await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "الزر غير معروف. افتح /start من جديد." });
 }
-\nexport async function POST(request: Request) {
+
+export async function POST(request: Request) {
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!expectedSecret || !safeSecretMatch(
     request.headers.get("x-telegram-bot-api-secret-token"),
