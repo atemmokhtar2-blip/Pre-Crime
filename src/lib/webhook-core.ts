@@ -73,14 +73,34 @@ export function createWebhookHandler(deps: WebhookDeps) {
   function richLayout(text: string): string {
     const lines = text.split("\\n");
     const first = lines.shift()?.trim() ?? "";
-    const body = lines.map((line) => {
+    const output: string[] = [`# ${first}`, ""];
+    let tableRows: string[] = [];
+    const flushTable = () => {
+      if (tableRows.length) {
+        output.push("| البيان | التفاصيل |", "|:--|:--|", ...tableRows, "");
+        tableRows = [];
+      }
+    };
+    for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed) return "";
-      if (/^[━─—-]{3,}$/.test(trimmed)) return "---";
-      if (trimmed.startsWith("• ")) return "- " + trimmed.slice(2);
-      return line;
-    }).join("\\n");
-    return `# ${first}\\n\\n${body}`.trim();
+      if (!trimmed) { flushTable(); output.push(""); continue; }
+      if (/^[━─—-]{3,}$/.test(trimmed)) { flushTable(); output.push("---", ""); continue; }
+      if (trimmed.startsWith("• ")) { flushTable(); output.push("- " + trimmed.slice(2)); continue; }
+      const pair = trimmed.match(/^([^:]{2,50}):\\s*(.+)$/);
+      if (pair) {
+        const clean = (value: string) => value.replace(/\\|/g, "\\\\|");
+        tableRows.push(`| ${clean(pair[1])} | ${clean(pair[2])} |`);
+        continue;
+      }
+      flushTable();
+      if (/^(?:📊|🛡️|👥|💬|⚠️|🔔|📨|🔗|🔤|📝|⚙️|🌐)\\s/.test(trimmed)) {
+        output.push(`## ${trimmed}`);
+      } else {
+        output.push(line);
+      }
+    }
+    flushTable();
+    return output.join("\\n").replace(/\\n{3,}/g, "\\n\\n").trim();
   }
 
   async function sendRichScreen(chatId: number, screen: { text: string; keyboard: InlineKeyboardButton[][] }): Promise<void> {
@@ -97,7 +117,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const markup = screen.keyboard.length ? { reply_markup: { inline_keyboard: screen.keyboard } } : undefined;
     try {
       await bot.editMessageText(chatId, messageId, undefined, {
-        rich_message: { markdown: richLayout(screen.text), is_rtl: true },
+        rich_message: { markdown: richLayout(screen.text) },
         ...(markup ?? {}),
       });
     } catch (error) {
