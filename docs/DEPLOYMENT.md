@@ -4,6 +4,10 @@
 
 The Vercel project is named `pre-crime` and is connected to `atemmokhtar2-blip/Pre-Crime`. Deployments are driven by Git pushes. Preview and Production environment variables must be configured separately.
 
+## Deployment protection
+
+The Vercel project currently has SSO deployment protection enabled for deployment URLs, while custom domains are excluded. Telegram cannot complete a Vercel SSO challenge. Before registering the webhook, either attach the intended production custom domain (and verify it is not protected) or explicitly adjust production deployment protection after dashboard authentication is implemented. Do not expose an unauthenticated admin dashboard just to make the webhook public.
+
 ## Provision the database
 
 1. Open the Vercel project and open Storage / Marketplace.
