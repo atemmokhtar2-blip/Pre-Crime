@@ -40,15 +40,16 @@ export interface RecentEvent {
 
 export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSignal, recent: RecentEvent[], now: number): ViolationKind[] {
   const violations: ViolationKind[] = [];
-  const windowMs = 1000;
+  const spamWindowMs = Math.max(policy.antiSpam.windowSeconds, 1) * 1000;
+  const floodWindowMs = Math.max(policy.antiFlood.windowSeconds, 1) * 1000;
+  const spamCount = recent.filter((e) => now - e.at <= spamWindowMs).length + 1;
+  const floodCount = recent.filter((e) => now - e.at <= floodWindowMs).length + 1;
 
-  const inWindow = recent.filter((e) => now - e.at <= windowMs * Math.max(policy.antiFlood.windowSeconds, policy.antiSpam.windowSeconds, 1));
-
-  if (policy.antiSpam.enabled && inWindow.length + 1 >= policy.antiSpam.threshold) {
+  if (policy.antiSpam.enabled && policy.antiSpam.threshold > 0 && spamCount >= policy.antiSpam.threshold) {
     violations.push("spam");
   }
 
-  if (policy.antiFlood.enabled && inWindow.length + 1 >= policy.antiFlood.maxMessages) {
+  if (policy.antiFlood.enabled && policy.antiFlood.maxMessages > 0 && floodCount >= policy.antiFlood.maxMessages) {
     violations.push("flood");
   }
 
