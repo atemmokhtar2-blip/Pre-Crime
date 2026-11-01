@@ -1,11 +1,43 @@
 import type { TelegramMessage } from "../types";
 
-export type MediaSignal = { hasMedia: boolean; hasFile: boolean; };
+export type MediaSignal = {
+  hasPhoto: boolean;
+  hasVideo: boolean;
+  hasAnimation: boolean;
+  hasSticker: boolean;
+  hasAudio: boolean;
+  hasVideoNote: boolean;
+  hasPaidMedia: boolean;
+  hasMedia: boolean;
+  hasFile: boolean;
+};
 
-// Media and file detection are deliberately separate categories.
+// Keep image moderation deliberately narrow. A photo with a caption or
+// accompanying text is treated as intentional content and is never auto-deleted
+// by the image-only toggle. Other media types are classified separately.
 export function inspectMedia(message: TelegramMessage): MediaSignal {
+  const hasPhoto = Boolean(message.photo);
+  const hasVideo = Boolean(message.video);
+  const hasAnimation = Boolean(message.animation);
+  const hasSticker = Boolean(message.sticker);
+  const hasAudio = Boolean(message.voice || message.audio);
+  const hasVideoNote = Boolean(message.video_note);
+  const hasPaidMedia = Boolean(message.paid_media);
   return {
-    hasMedia: Boolean(message.photo || message.video || message.animation || message.sticker || message.voice || message.audio || message.video_note || message.paid_media),
+    hasPhoto,
+    hasVideo,
+    hasAnimation,
+    hasSticker,
+    hasAudio,
+    hasVideoNote,
+    hasPaidMedia,
+    hasMedia: hasPhoto || hasVideo || hasAnimation || hasSticker || hasAudio || hasVideoNote || hasPaidMedia,
     hasFile: Boolean(message.document),
   };
+}
+
+export function shouldDeleteImage(message: TelegramMessage): boolean {
+  if (!message.photo) return false;
+  const accompanyingText = (message.caption ?? message.text ?? "").trim();
+  return accompanyingText.length === 0;
 }
