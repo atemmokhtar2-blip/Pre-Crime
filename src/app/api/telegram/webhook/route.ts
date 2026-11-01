@@ -50,8 +50,9 @@ export async function POST(request: Request) {
       INSERT INTO telegram_updates (update_id, update_type, chat_id, status)
       VALUES (${update.update_id}, ${updateType(update)}, ${chatIdOf(update)}, 'processing')
       ON CONFLICT (update_id) DO UPDATE
-        SET status = 'processing', error_code = NULL
+        SET status = 'processing', received_at = NOW(), error_code = NULL
         WHERE telegram_updates.status = 'failed'
+           OR (telegram_updates.status = 'processing' AND telegram_updates.received_at < NOW() - INTERVAL '2 minutes')
       RETURNING update_id
     `;
 
@@ -83,7 +84,12 @@ export async function POST(request: Request) {
       `;
       return Response.json({ ok: false, error: "update_processing_failed" }, { status: 503 });
     }
-  } catch {
+  } catch (error) {
+    console.error("telegram_webhook_persistence_failed", {
+      updateId: update.update_id,
+      updateType: updateType(update),
+      error: error instanceof Error ? error.message : String(error),
+    });
     return Response.json({ ok: false, error: "temporary_persistence_failure" }, { status: 503 });
   }
 }
