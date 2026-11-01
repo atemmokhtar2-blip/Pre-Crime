@@ -32,6 +32,13 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "invalid_update_id" }, { status: 400 });
   }
 
+  console.info("telegram_webhook_received", {
+    updateId: update.update_id,
+    updateType: updateType(update),
+    hasCallbackData: Boolean(update.callback_query?.data),
+    callbackSection: update.callback_query?.data?.split(":")[1] ?? null,
+  });
+
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const databaseUrl = process.env.DATABASE_URL;
   if (!token || !databaseUrl) {
