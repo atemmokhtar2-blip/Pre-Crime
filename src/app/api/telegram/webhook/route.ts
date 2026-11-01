@@ -17,6 +17,12 @@ type TelegramUpdate = {
     old_chat_member?: { status?: string };
     new_chat_member?: { status?: string; user?: { id?: number; is_bot?: boolean } };
   };
+  callback_query?: {
+    id: string;
+    data?: string;
+    from: { id: number };
+    message?: { message_id: number; chat: { id: number; type: string } };
+  };
   [key: string]: unknown;
 };
 
@@ -187,7 +193,11 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
     }
 
     try {
-      if (update.callback_query) {\n        await handleCallback(token, update.callback_query);\n      }\n\n      const text = update.message?.text?.trim() ?? "";
+      if (update.callback_query) {
+        await handleCallback(token, update.callback_query);
+      }
+
+      const text = update.message?.text?.trim() ?? "";
       if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text) && update.message?.chat?.id) {
         const me = await telegram<{ username?: string }>(token, "getMe");
         if (!me.username) throw new Error("bot_username_unavailable");
@@ -202,10 +212,10 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
           chat_id: update.message.chat.id,
           text: message,
           reply_markup: {
-            inline_keyboard: [[{
-              text: "➕ إضافة البوت إلى مجموعة",
-              url: `https://t.me/${me.username}?startgroup=true`,
-            }]],
+            inline_keyboard: [
+              [{ text: "➕ إضافة البوت إلى مجموعة", url: `https://t.me/${me.username}?startgroup=true` }],
+              [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }],
+            ],
           },
           disable_web_page_preview: true,
         });
@@ -236,7 +246,8 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
           text:
             groupGreeting +
             "أنا PRE-CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\n" +
-            "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء وإدارة المجموعة، وبعدها هأكد لكم إنّي جاهز للعمل.",
+            "تمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين، ثم افحصوا جاهزيتي من الزر بالأسفل.",
+          reply_markup: { inline_keyboard: [[{ text: "🔎 فحص جاهزية الحماية", callback_data: "pc:check" }], [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }]] },
           disable_web_page_preview: true,
         });
       }
