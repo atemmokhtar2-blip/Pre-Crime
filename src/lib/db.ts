@@ -123,12 +123,23 @@ export async function ensureSchema(sql: Sql): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS telegram_message_events (
+      update_id BIGINT PRIMARY KEY,
+      chat_id BIGINT NOT NULL,
+      telegram_user_id BIGINT NOT NULL,
+      message_text TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS telegram_message_events_user_created_idx ON telegram_message_events(chat_id, telegram_user_id, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS group_members_status_idx ON group_members(chat_id, status)`;
   await sql`CREATE INDEX IF NOT EXISTS moderation_actions_group_created_idx ON moderation_actions(chat_id, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS audit_events_group_created_idx ON audit_events(chat_id, created_at DESC)`;
 }
 
 let schemaReady = false;
+let messageEventPruneCounter = 0;
 
 export function createNeonRepo(sql: Sql): PreCrimeRepo {
   async function ensure(): Promise<void> {
@@ -320,6 +331,37 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
     async totalMessages(chatId) {
       const rows = await sql`SELECT COALESCE(SUM(message_count),0)::bigint AS c FROM group_members WHERE chat_id = ${chatId}`;
       return Number(rows[0]?.c ?? 0);
+    },
+
+    async recordMessageEvent(chatId, userId, updateId, text, at, windowMs) {
+      const rows = await sql`
+        WITH inserted AS (
+          INSERT INTO telegram_message_events (update_id, chat_id, telegram_user_id, message_text, created_at)
+          VALUES (${updateId}, ${chatId}, ${userId}, ${text}, to_timestamp(${at} / 1000.0))
+          ON CONFLICT (update_id) DO NOTHING
+          RETURNING update_id
+        )
+        SELECT
+          (EXTRACT(EPOCH FROM created_at) * 1000)::double precision AS at,
+          message_text AS text
+        FROM telegram_message_events
+        WHERE chat_id = ${chatId}
+          AND telegram_user_id = ${userId}
+          AND update_id <> ${updateId}
+          AND created_at >= to_timestamp(${at - windowMs} / 1000.0)
+        ORDER BY created_at DESC
+        LIMIT 59
+      `;
+      messageEventPruneCounter += 1;
+      if (messageEventPruneCounter >= 1000) {
+        messageEventPruneCounter = 0;
+        try {
+          await sql`DELETE FROM telegram_message_events WHERE created_at < NOW() - INTERVAL '24 hours'`;
+        } catch (error) {
+          console.error("telegram_message_event_prune_failed", error instanceof Error ? error.message : String(error));
+        }
+      }
+      return rows.map((row) => ({ at: Number(row.at), text: String(row.text ?? "") }));
     },
 
     async totalWarnings(chatId) {
