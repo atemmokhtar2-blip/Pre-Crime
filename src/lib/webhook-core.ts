@@ -579,6 +579,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "protection": {
+        if (!checks.canProtection) { await ack(update.id, "غير مصرح لك بتعديل الحماية.", true); return; }
         await editScreen(chatId, messageId, screenProtection(settings, gid));
         await ack(update.id);
         return;
@@ -640,6 +641,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "members": {
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بتعديل إعدادات الأعضاء.", true); return; }
         await editScreen(chatId, messageId, screenMembersSettings(settings, gid));
         await ack(update.id);
         return;
@@ -667,6 +669,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const targetId = Number(parsed.args[1]);
         const origin = parsed.args[2] ?? "";
         if (!Number.isSafeInteger(targetId) || !action) { await ack(update.id, "تعذر تحديد العضو أو الإجراء.", true); return; }
+        if (action === "warn" && !checks.canMute) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
+        if (!["ban", "kick", "unban", "mute", "unmute", "unwarn", "warn"].includes(action)) { await ack(update.id, "الإجراء غير معروف.", true); return; }
         if (action === "ban" || action === "kick" || action === "unban") {
           if (!checks.canBan) { await ack(update.id, "غير مصرح لك بهذا الإجراء.", true); return; }
         }
@@ -721,6 +725,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "messages": {
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بتعديل الرسائل.", true); return; }
         await editScreen(chatId, messageId, screenMessagesSettings(settings, gid));
         await ack(update.id);
         return;
@@ -743,6 +748,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "preview": {
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بمعاينة الرسائل.", true); return; }
         const kind = parsed.args[0] === "goodbye" ? "goodbye" : "welcome";
         const template = kind === "welcome" ? settings.messages.welcomeText : settings.messages.goodbyeText;
         const preview = kind === "welcome"
@@ -775,6 +781,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "templates": {
+        if (!checks.canMessages) { await ack(update.id, "غير مصرح لك بإدارة القوالب.", true); return; }
         await editScreen(chatId, messageId, screenTemplates(settings, gid));
         await ack(update.id);
         return;
@@ -799,6 +806,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "notifications": {
+        if (!checks.canSettings) { await ack(update.id, "غير مصرح لك بإدارة التنبيهات.", true); return; }
         await editScreen(chatId, messageId, screenNotifications(settings, gid));
         await ack(update.id);
         return;
@@ -849,7 +857,11 @@ export function createWebhookHandler(deps: WebhookDeps) {
           await ack(update.id, "لا يوجد مديرو بوت مسجلون.", true);
           return;
         }
-        const target = settings.permissions.botAdmins[0];
+        const target = Number(parsed.args[0]);
+        if (!Number.isSafeInteger(target) || !settings.permissions.botAdmins.includes(target)) {
+          await ack(update.id, "اختر مديرًا مسجلًا لإزالته.", true);
+          return;
+        }
         settings.permissions.botAdmins = settings.permissions.botAdmins.filter((id) => id !== target);
         await repo.setSettings(gid, settings);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", "botAdmins", { removed: target });
@@ -899,7 +911,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       case "reset_do": {
         if (role !== "owner" && role !== "bot_admin") { await ack(update.id, "غير مصرح.", true); return; }
-        const key = (parsed.args[0] ?? "all") as ResetSectionKey;
+        const rawKey = parsed.args[0] ?? "all";
+        const validKeys: ResetSectionKey[] = ["protection", "members", "messages", "notifications", "permissions", "all"];
+        if (!validKeys.includes(rawKey as ResetSectionKey)) { await ack(update.id, "قسم إعادة الضبط غير معروف.", true); return; }
+        const key = rawKey as ResetSectionKey;
         const next = resetSection(settings, key);
         await repo.setSettings(gid, next);
         await repo.addAudit(gid, actorId, actorName, "settings_reset", key, {});
