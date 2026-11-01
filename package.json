@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node -e \"require('fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc --target ES2022 --module commonjs --moduleResolution node --noEmit false --outDir .test-build --skipLibCheck src/lib/onboarding.ts && node --test tests/*.test.cjs"
+    "test": "node -e \"require('fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc --target ES2022 --module commonjs --moduleResolution node --noEmit false --outDir .test-build --skipLibCheck src/lib/onboarding.ts src/lib/protection.ts src/lib/types.ts && node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
