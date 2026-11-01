@@ -30,3 +30,26 @@ test("forward detection remains compatible with legacy fields", () => {
   const signal = extractSignal({ message_id: 1, chat: { id: -1001, type: "supergroup" }, forward_from_chat: { id: -1002 } });
   assert.equal(signal.hasForward, true);
 });
+
+
+test("detects naked domains and Telegram links without URL entities", () => {
+  assert.equal(extractSignal({ message_id: 1, chat: { id: -1001, type: "supergroup" }, text: "join t.me/example" }).hasUrl, true);
+  assert.equal(extractSignal({ message_id: 2, chat: { id: -1001, type: "supergroup" }, text: "visit example.com now" }).hasUrl, true);
+});
+
+test("detects hidden text links and allows only exact whitelisted hosts or subdomains", () => {
+  const signal = extractSignal({
+    message_id: 3,
+    chat: { id: -1001, type: "supergroup" },
+    text: "اضغط هنا",
+    entities: [{ type: "text_link", url: "https://news.example.com/path" }],
+  });
+  assert.equal(signal.hasUrl, true);
+  assert.deepEqual(evaluateProtection(policy({ antiLinks: { enabled: true, whitelist: ["example.com"] } }), signal, [], 1000), []);
+  assert.deepEqual(evaluateProtection(policy({ antiLinks: { enabled: true, whitelist: ["example.com"] } }), extractSignal({ message_id: 4, chat: { id: -1001, type: "supergroup" }, text: "evil-example.com" }), [], 1000), ["link"]);
+});
+
+test("Arabic word filter ignores tashkeel and common alef variants", () => {
+  const result = evaluateProtection(policy({ wordFilter: { enabled: true, words: ["إهانة"] } }), { text: "اهانة", hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
+  assert.deepEqual(result, ["word"]);
+});
