@@ -409,14 +409,16 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const violations = evaluateProtection(settings.protection, signal, recents, eventTime);
 
     if (violations.length > 0) {
-      // Check administrator status before deleting: admins must be exempt from both.
       let actorStatus: MemberStatus | undefined;
       try {
         actorStatus = (await bot.getChatMember(gid, userId)).status;
       } catch {
         actorStatus = undefined;
       }
-      if (actorStatus !== "creator" && actorStatus !== "administrator") {
+      const isAdmin = actorStatus === "creator" || actorStatus === "administrator";
+      // Admins are exempt from general moderation, but not from the configured word filter.
+      const enforcedViolations = isAdmin ? violations.filter((v) => v === "word") : violations;
+      if (enforcedViolations.length > 0) {
         try {
           await bot.deleteMessage(gid, message.message_id);
         } catch (error) {
@@ -427,9 +429,12 @@ export function createWebhookHandler(deps: WebhookDeps) {
           });
         }
         const label = memberLabel(name, from.username || null, userId);
-        await repo.addAudit(gid, 0, "PRE CRIME", "violation", label, { violations: violations.map((v) => VIOLATION_LABELS[v]) });
-        await applyPunishment(gid, userId, "PRE CRIME", label, violations);
-      } else {
+        await repo.addAudit(gid, 0, "PRE CRIME", "violation", label, {
+          violations: enforcedViolations.map((v) => VIOLATION_LABELS[v]),
+          ...(isAdmin ? { detected: "admin-word-filter" } : {}),
+        });
+        if (!isAdmin) await applyPunishment(gid, userId, "PRE CRIME", label, enforcedViolations);
+      } else if (isAdmin) {
         await repo.addAudit(gid, 0, "PRE CRIME", "violation", name, { violations, detected: "admin-exempt" });
       }
     }
