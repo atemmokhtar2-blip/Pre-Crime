@@ -118,3 +118,40 @@ test("does not fuzzy-match short or unrelated ordinary words", () => {
   assert.deepEqual(evaluateProtection(enabled, signal("مساكم جميل"), [], 1000), []);
   assert.deepEqual(evaluateProtection(enabled, signal("كلام جميل"), [], 1000), []);
 });
+
+
+test("detects obfuscated links with zero-width characters, dot disguises and hxxp schemes", () => {
+  for (const text of [
+    "hxxps://evil.example/path",
+    "evil[.]example/path",
+    "evil (.) example/path",
+    "evil\\u200b.example/path",
+    "www.example.photography",
+  ]) {
+    assert.equal(extractSignal({ message_id: 5, chat: { id: -1001, type: "supergroup" }, text }).hasUrl, true, text);
+  }
+});
+
+test("extracts URL entities by offset and length and preserves hidden text links", () => {
+  const visible = extractSignal({
+    message_id: 6,
+    chat: { id: -1001, type: "supergroup" },
+    text: "open example.com",
+    entities: [{ type: "url", offset: 5, length: 11 }],
+  });
+  assert.equal(visible.hasUrl, true);
+  const hidden = extractSignal({
+    message_id: 7,
+    chat: { id: -1001, type: "supergroup" },
+    text: "click here",
+    entities: [{ type: "text_link", offset: 6, length: 4, url: "https://malware.example/a" }],
+  });
+  assert.equal(hidden.hasUrl, true);
+  assert.deepEqual(evaluateProtection(policy({ antiLinks: { enabled: true, whitelist: [] } }), hidden, [], 1000), ["link"]);
+});
+
+test("recognizes Telegram video notes and paid media as media attachments", () => {
+  assert.equal(extractSignal({ message_id: 8, chat: { id: -1001, type: "supergroup" }, video_note: {} }).hasMedia, true);
+  assert.equal(extractSignal({ message_id: 9, chat: { id: -1001, type: "supergroup" }, paid_media: {} }).hasMedia, true);
+  assert.equal(extractSignal({ message_id: 10, chat: { id: -1001, type: "supergroup" }, document: {} }).hasDocument, true);
+});
