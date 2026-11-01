@@ -118,11 +118,9 @@ export function screenGuide(username: string): Screen {
 export function screenPanel(groupTitle: string, gid: number): Screen {
   return {
     text:
-      `🛡️ ${BRAND}  •  مركز التحكم\n` +
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `🏷️ ${groupTitle}\n` +
-      `🟢 لوحة الإدارة جاهزة\n\n` +
-      `اختر وحدة الإدارة التي تريد فتحها من الأقسام التالية:`,
+      `🛡️ ${BRAND}\n` +
+      `━━━━━━━━━━━━━━━━━━\n\n` +
+      `اختر القسم الذي تريد إدارته:`,
     keyboard: [
       [
         { text: `👥 الأعضاء`, callback_data: encodeCallback("memberlist", gid), style: "primary" },
