@@ -263,7 +263,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            `**⌯︙ تحذير المستخدم**\\n\\n👤 العضو\\n${targetName}\\n\\n📌 السبب\\n${violations.includes("word") ? "كلمات مسيئة" : base}\\n\\n🔢 عدد التحذيرات\\n${count}`,
+            `⌯︙ تحذير المستخدم\\n\\n👤 العضو\\n${targetName}\\n\\n📌 السبب\\n${violations.includes("word") ? "كلمات مسيئة" : base}\\n\\n🔢 عدد التحذيرات\\n${count}`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
