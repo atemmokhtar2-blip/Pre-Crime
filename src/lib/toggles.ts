@@ -142,7 +142,7 @@ export const MEMBER_TOGGLES: ToggleDefinition[] = [
     set: (s, v) => { s.members.newMemberMode = v as NewMemberMode; },
     valueOf: (s) => NEW_MEMBER_LABELS[s.members.newMemberMode],
   },
-];
+].filter((toggle) => ["welcome", "goodbye"].includes(toggle.key));
 
 export const NOTIFICATION_TOGGLES: ToggleDefinition[] = [
   {
@@ -199,7 +199,7 @@ export const NOTIFICATION_TOGGLES: ToggleDefinition[] = [
     set: (s, v) => { s.notifications.dailyReport.enabled = Boolean(v); },
     valueOf: () => "",
   },
-];
+].filter((toggle) => toggle.key !== "n_daily");
 
 export const PERMISSION_TOGGLES: ToggleDefinition[] = [
   {
