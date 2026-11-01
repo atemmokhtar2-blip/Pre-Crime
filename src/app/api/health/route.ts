@@ -1,23 +1,10 @@
 import { neon } from "@neondatabase/serverless";
+import { createNeonRepo, type Sql } from "../../../lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Keep Telegram webhook subscriptions aligned with supported update handlers.
 
 type Check = "ok" | "missing" | "failed" | "schema_missing";
-
-async function telegramCall(token: string, method: string, body?: object) {
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-    signal: AbortSignal.timeout(10000),
-  });
-  const result = await response.json() as { ok?: boolean; result?: any };
-  if (!response.ok || result.ok !== true) throw new Error("telegram_api_failed");
-  return result.result;
-}
 
 export async function GET() {
   const checks: Record<string, Check> = {
@@ -31,25 +18,11 @@ export async function GET() {
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl) {
     try {
-      const sql = neon(databaseUrl);
+      const sql = neon(databaseUrl) as unknown as Sql;
       await sql`SELECT 1 AS healthy`;
       checks.database = "ok";
-      await sql`
-        CREATE TABLE IF NOT EXISTS telegram_updates (
-          update_id BIGINT PRIMARY KEY,
-          update_type TEXT NOT NULL,
-          chat_id BIGINT,
-          received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          processed_at TIMESTAMPTZ,
-          status TEXT NOT NULL DEFAULT 'received'
-            CHECK (status IN ('received','processing','processed','failed')),
-          error_code TEXT
-        )
-      `;
-      const rows = await sql`
-        SELECT to_regclass('public.telegram_updates') IS NOT NULL AS present
-      `;
-      checks.database_schema = rows[0]?.present === true ? "ok" : "schema_missing";
+      await createNeonRepo(sql).ensureSchema();
+      checks.database_schema = "ok";
     } catch {
       checks.database = "failed";
     }
@@ -57,21 +30,42 @@ export async function GET() {
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (botToken) {
+    const telegramCall = async (method: string, body?: object) => {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+        method: body ? "POST" : "GET",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+        signal: AbortSignal.timeout(10000),
+      });
+      const result = (await response.json()) as { ok?: boolean; result?: any };
+      if (!response.ok || result.ok !== true) throw new Error("telegram_api_failed");
+      return result.result;
+    };
+
     try {
-      const me = await telegramCall(botToken, "getMe");
+      const me = await telegramCall("getMe");
       checks.telegram = me?.username ? "ok" : "failed";
 
       const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-      const appUrl = process.env.APP_URL;
+      // Vercel exposes the deployment URL as VERCEL_URL (no scheme); Netlify
+      // exposes the full URL via process.env.URL. Prefer an explicit APP_URL,
+      // then fall back to the platform-provided values so the webhook registers
+      // automatically right after deploy without extra manual config.
+      const appUrl =
+        process.env.APP_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+        process.env.URL ||
+        "";
       if (webhookSecret && appUrl && appUrl.startsWith("https://")) {
         const webhookUrl = new URL("/api/telegram/webhook", appUrl).toString();
-        await telegramCall(botToken, "setWebhook", {
+        await telegramCall("setWebhook", {
           url: webhookUrl,
           secret_token: webhookSecret,
-          allowed_updates: ["message", "my_chat_member", "callback_query"],
+          allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "chat_join_request"],
           drop_pending_updates: false,
         });
-        const info = await telegramCall(botToken, "getWebhookInfo");
+        const info = await telegramCall("getWebhookInfo");
         checks.webhook = info?.url === webhookUrl ? "ok" : "failed";
       } else {
         checks.webhook = "missing";

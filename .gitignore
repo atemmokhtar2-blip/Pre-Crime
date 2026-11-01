@@ -8,3 +8,8 @@ dist
 .vercel
 *.log
 .DS_Store
+
+# generated
+next-env.d.ts
+*.tsbuildinfo
+.test-build
