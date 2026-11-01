@@ -2,6 +2,7 @@ import { neon } from "@neondatabase/serverless";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Keep Telegram webhook subscriptions aligned with supported update handlers.
 
 type Check = "ok" | "missing" | "failed" | "schema_missing";
 
