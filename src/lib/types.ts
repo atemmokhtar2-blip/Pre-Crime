@@ -260,7 +260,7 @@ export interface TelegramMessage {
   document?: unknown;
   photo?: unknown;
   audio?: unknown;
-  voice?: unknown;
+  voice?: unknown;\n  video_note?: unknown;\n  paid_media?: unknown;
 }
 
 export interface TelegramUpdate {
