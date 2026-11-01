@@ -83,9 +83,13 @@ export function createWebhookHandler(deps: WebhookDeps) {
     }
   }
 
+  const answeredCallbackIds = new Set<string>();
+
   async function ack(callbackQueryId: string, text?: string, showAlert = false): Promise<void> {
+    if (answeredCallbackIds.has(callbackQueryId)) return;
     try {
       await bot.answerCallbackQuery(callbackQueryId, { text, show_alert: showAlert });
+      answeredCallbackIds.add(callbackQueryId);
     } catch (error) {
       console.error("telegram_callback_ack_failed", { error: error instanceof Error ? error.message : String(error) });
     }
@@ -480,6 +484,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
   async function handleCallback(update: NonNullable<TelegramUpdate["callback_query"]>): Promise<void> {
     const message = update.message;
     const data = update.data ?? "";
+    // Acknowledge immediately so Telegram stops the button spinner before any DB/API work.
+    await ack(update.id);
     if (!message) {
       await ack(update.id, "افتح البوت من جديد وجرب مرة أخرى.");
       return;
@@ -502,6 +508,12 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const gid = explicitGid ?? (chatIsGroup ? chatId : null);
 
     const section = parsed.section;
+    console.info("telegram_callback_received", {
+      section,
+      groupId: gid,
+      actorId,
+      chatType: chat.type,
+    });
 
     // Non-group sections
     if (section === "home") {
