@@ -293,7 +293,7 @@ export function screenMemberDetail(
       rows.push([{ text: "🚫 حظر", callback_data: encodeCallback("act", gid, ["ban", member.telegram_user_id]) }]);
       rows.push([{ text: "👢 طرد", callback_data: encodeCallback("act", gid, ["kick", member.telegram_user_id]) }]);
     }
-    rows.push([{ text: "⚠️ تحذير", callback_data: encodeCallback("act", gid, ["warn", member.telegram_user_id]) }]);
+    if (checks.canMute) rows.push([{ text: "⚠️ تحذير", callback_data: encodeCallback("act", gid, ["warn", member.telegram_user_id]) }]);
   }
 
   if (member.warning_count > 0 && checks.canMute) {
@@ -480,8 +480,12 @@ export function screenPermissions(settings: GroupSettings, gid: number, admins: 
     ? admins.map((a) => `• ${a.id} (${a.status === "creator" ? "مالك" : "مشرف"})`).join("\n")
     : "لا يمكن جلب قائمة المشرفين الآن.";
 
+  const botAdminRows = settings.permissions.botAdmins.map((id) => [{
+    text: `🗑 إزالة مدير البوت: ${id}`,
+    callback_data: encodeCallback("remove_admin", gid, [id]),
+  }]);
+  rows.push(...botAdminRows);
   rows.push([{ text: "➕ إضافة مدير بوت", callback_data: encodeCallback("add_admin", gid) }]);
-  rows.push([{ text: "🗑 إزالة مدير بوت", callback_data: encodeCallback("remove_admin", gid) }]);
   rows.push([groupBack(gid)]);
 
   return {
@@ -492,6 +496,8 @@ export function screenPermissions(settings: GroupSettings, gid: number, admins: 
       `🧑‍💼 مدير البوت — ${ROLE_DESCRIPTIONS.bot_admin}\n` +
       `🛡️ مشرف — ${ROLE_DESCRIPTIONS.moderator}\n` +
       `👁 مراقب — ${ROLE_DESCRIPTIONS.watcher}\n\n` +
+      `مديرو البوت المسجلون: ${settings.permissions.botAdmins.length ? settings.permissions.botAdmins.join("، ") : "لا يوجد"}\n\n` +
+      `مشرفو المجموعة الحاليون:\n${adminNames}\n\n` +
       `صلاحيات مستقلة للمشرفين:`,
     keyboard: rows,
   };
