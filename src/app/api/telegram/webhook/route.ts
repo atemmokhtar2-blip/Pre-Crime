@@ -95,15 +95,6 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
       await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "فحص الجاهزية متاح من داخل المجموعة.", show_alert: true });
       return;
     }
-    const actor = await telegram<{ status: string }>(token, "getChatMember", {
-      chat_id: message.chat.id,
-      user_id: callback.from.id,
-    });
-    if (actor.status !== "creator" && actor.status !== "administrator") {
-      await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "الفحص متاح لمشرفي المجموعة فقط.", show_alert: true });
-      return;
-    }
-
     const me = await telegram<{ id: number }>(token, "getMe");
     const botMember = await telegram<{
       status: string;
@@ -113,6 +104,23 @@ async function handleCallback(token: string, callback: NonNullable<TelegramUpdat
     }>(token, "getChatMember", { chat_id: message.chat.id, user_id: me.id });
 
     const { isAdmin, missing, ready } = evaluateBotPermissions(botMember);
+    if (!isAdmin) {
+      await edit(
+        "⚠️ لا أستطيع فحص صلاحيات المشرفين بعد. ارفع PRE-CRIME إلى مشرف أولًا، ثم أعد الفحص.",
+        [[{ text: "🔄 إعادة الفحص", callback_data: "pc:check" }], [{ text: "📘 طريقة التفعيل", callback_data: "pc:guide" }]],
+      );
+      await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "ارفع البوت مشرفًا أولًا.", show_alert: true });
+      return;
+    }
+
+    const actor = await telegram<{ status: string }>(token, "getChatMember", {
+      chat_id: message.chat.id,
+      user_id: callback.from.id,
+    });
+    if (actor.status !== "creator" && actor.status !== "administrator") {
+      await telegram(token, "answerCallbackQuery", { callback_query_id: callback.id, text: "الفحص متاح لمشرفي المجموعة فقط.", show_alert: true });
+      return;
+    }
     const report = ready
       ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\\n\\nملاحظة: ده فحص للصلاحيات فقط، وليس تأكيدًا لتفعيل كل أنظمة الحماية المتقدمة."
       : "⚠️ البوت غير جاهز بالكامل.\\n" +
