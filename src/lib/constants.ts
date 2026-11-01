@@ -1,8 +1,8 @@
 // Shared Arabic UI vocabulary for the bot. Grouped so screens stay readable and
 // every label has a single source of truth.
 
-export const BRAND = "PRE CRIME";
-export const BRAND_GUARD = "🛡️ PRE CRIME";
+export const BRAND = "Pre-Crime";
+export const BRAND_GUARD = "🛡️ Pre-Crime";
 
 export const EM = {
   shield: "🛡️",
@@ -63,8 +63,8 @@ export const EM = {
 };
 
 export const SECTION_TITLES = {
-  panel: "لوحة تحكم PRE CRIME",
-  settings: "إعدادات PRE CRIME",
+  panel: "Pre-Crime",
+  settings: "إعدادات Pre-Crime",
   general: "الإعدادات العامة",
   protection: "إعدادات الحماية",
   members: "إعدادات الأعضاء",
@@ -81,6 +81,6 @@ export const SECTION_TITLES = {
   guide: "طريقة الاستخدام",
 };
 
-export const FOOTER = "PRE CRIME • حماية مجموعتك تبدأ من هنا";
+export const FOOTER = "Pre-Crime • حماية مجموعتك تبدأ من هنا";
 
 export const DEFAULT_REASON = "مخالفة قواعد المجموعة";
