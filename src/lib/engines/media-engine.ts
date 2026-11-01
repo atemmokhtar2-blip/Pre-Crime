@@ -10,6 +10,8 @@ export type MediaSignal = {
   hasPaidMedia: boolean;
   hasMedia: boolean;
   hasFile: boolean;
+  kind: string[];
+  hasCaption: boolean;
 };
 
 // Keep image moderation deliberately narrow. A photo with a caption or
@@ -23,7 +25,10 @@ export function inspectMedia(message: TelegramMessage): MediaSignal {
   const hasAudio = Boolean(message.voice || message.audio);
   const hasVideoNote = Boolean(message.video_note);
   const hasPaidMedia = Boolean(message.paid_media);
+  const kind = [hasPhoto && "photo", hasVideo && "video", hasAnimation && "animation", hasSticker && "sticker", hasAudio && "audio", hasVideoNote && "video_note", hasPaidMedia && "paid_media"].filter(Boolean) as string[];
   return {
+    kind,
+    hasCaption: Boolean((message.caption ?? message.text ?? "").trim()),
     hasPhoto,
     hasVideo,
     hasAnimation,
