@@ -435,7 +435,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       deleteNow = false;
     }
     if (settings.messages.cleanup === "links" && signal.hasUrl) deleteNow = true;
-    if (settings.messages.cleanup === "media" && signal.hasMedia) deleteNow = true;
+    if (settings.messages.cleanup === "media" && shouldDeleteImage(message)) deleteNow = true;
     if (settings.messages.cleanup === "files" && signal.hasDocument) deleteNow = true;
 
     if (deleteNow) {
