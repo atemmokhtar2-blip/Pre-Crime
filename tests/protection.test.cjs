@@ -53,3 +53,23 @@ test("Arabic word filter ignores tashkeel and common alef variants", () => {
   const result = evaluateProtection(policy({ wordFilter: { enabled: true, words: ["إهانة"] } }), { text: "اهانة", hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
   assert.deepEqual(result, ["word"]);
 });
+
+
+test("built-in Arabic profanity is detected even before custom words are added", () => {
+  const result = evaluateProtection(policy({ wordFilter: { enabled: true, words: [] } }), { text: "كسمك", hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
+  assert.deepEqual(result, ["word"]);
+});
+
+test("Arabic profanity evasion using spaces, tatweel, and diacritics is detected", () => {
+  for (const text of ["ك س م ك", "كـسـمـك", "كُسْمَك"]) {
+    const result = evaluateProtection(policy({ wordFilter: { enabled: true, words: [] } }), { text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false }, [], 1000);
+    assert.deepEqual(result, ["word"], text);
+  }
+});
+
+test("custom phrases are normalized but harmless words are not broadly blocked", () => {
+  const enabled = policy({ wordFilter: { enabled: true, words: ["إهانة"] } });
+  const signal = (text) => ({ text, hasUrl: false, hasForward: false, hasMedia: false, hasDocument: false });
+  assert.deepEqual(evaluateProtection(enabled, signal("اهانة"), [], 1000), ["word"]);
+  assert.deepEqual(evaluateProtection(enabled, signal("الاهتمام بالتعليم"), [], 1000), []);
+});
