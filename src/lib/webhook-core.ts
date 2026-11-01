@@ -250,10 +250,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const reasonLabel = violations.includes("word") ? "كلمات مسيئة" : base;
         const safeReason = safe(reasonLabel);
         const warningMarkdown =
-          `**⌯︙ تحذير المستخدم**\\n\\n` +
-          `**👤 العضو**\\n${safeName}\\n\\n` +
-          `**📌 السبب**\\n${safeReason}\\n\\n` +
-          `**🔢 عدد التحذيرات**\\n${count}`;
+          `**⌯︙ تحذير المستخدم**\n\n` +
+          `**👤 العضو**\n${safeName}\n\n` +
+          `**📌 السبب**\n${safeReason}\n\n` +
+          `**🔢 عدد التحذيرات**\n${count}`;
         await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
@@ -263,7 +263,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            `⌯︙ تحذير المستخدم\\n\\n👤 العضو\\n${targetName}\\n\\n📌 السبب\\n${violations.includes("word") ? "كلمات مسيئة" : base}\\n\\n🔢 عدد التحذيرات\\n${count}`,
+            `⌯︙ تحذير المستخدم\n\n👤 العضو\n${targetName}\n\n📌 السبب\n${violations.includes("word") ? "كلمات مسيئة" : base}\n\n🔢 عدد التحذيرات\n${count}`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
