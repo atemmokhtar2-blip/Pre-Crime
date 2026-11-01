@@ -48,8 +48,50 @@ function normalizeText(value: string): string {
     .normalize("NFKC")
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
     .replace(/[أإآٱ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
     .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه");
+    .replace(/ة/g, "ه")
+    .replace(/[پ]/g, "ب")
+    .replace(/[ڤ]/g, "ف")
+    .replace(/[گ]/g, "ك");
+}
+
+function compactText(value: string): string {
+  return normalizeText(value).replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function tokens(value: string): string[] {
+  return normalizeText(value).match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+// Baseline Egyptian/Arabic abusive terms. Group owners can extend this list
+// with their own words; the filter remains fully local and has no API cost.
+const BUILTIN_BLOCKED_WORDS = [
+  "كسمك", "كسمك", "كس امك", "كس اختك", "كسختك", "كسم", "كس ام",
+  "شرموط", "شرموطه", "شراميط", "متناك", "متناكه", "منيوك", "منيوكه",
+  "خول", "خولات", "عرص", "قحبه", "قحاب", "لبوه", "لبوه",
+  "طيز", "زب", "زبر", "نيك", "انيك", "ينك", "خول",
+];
+
+function containsBlockedWord(message: string, customWords: string[]): boolean {
+  const normalizedTokens = tokens(message);
+  const compactMessage = compactText(message);
+  const candidates = [...BUILTIN_BLOCKED_WORDS, ...customWords]
+    .map((word) => ({ spaced: normalizeText(word).trim(), compact: compactText(word) }))
+    .filter((word) => word.compact.length >= 2);
+
+  for (const candidate of candidates) {
+    // Exact token match avoids false positives inside harmless longer words.
+    if (normalizedTokens.some((token) => token === candidate.compact)) return true;
+    // Catch separators inserted between letters: ك س م ك / كـسـمـك / ك*س*م*ك.
+    if (candidate.compact.length >= 3 && compactMessage.includes(candidate.compact)) return true;
+  }
+
+  // Catch character repetition used to evade matching, e.g. كــــســــمــــك.
+  const squeezed = normalizeText(message).replace(/(.)\1{1,}/gu, "$1");
+  const squeezedCompact = compactText(squeezed);
+  return candidates.some((candidate) => candidate.compact.length >= 3 && squeezedCompact.includes(candidate.compact));
 }
 
 export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSignal, recent: RecentEvent[], now: number): ViolationKind[] {
@@ -92,11 +134,8 @@ export function evaluateProtection(policy: ProtectionPolicy, signal: MessageSign
   }
 
   const words = policy.wordFilter.words.filter((w) => w && w.trim().length > 0);
-  if (policy.wordFilter.enabled && words.length > 0) {
-    const lower = normalizeText(signal.text);
-    if (words.some((w) => lower.includes(normalizeText(w.trim())))) {
-      violations.push("word");
-    }
+  if (policy.wordFilter.enabled && containsBlockedWord(signal.text, words)) {
+    violations.push("word");
   }
 
   return violations;
