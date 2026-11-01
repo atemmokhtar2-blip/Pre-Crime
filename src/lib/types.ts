@@ -131,7 +131,7 @@ export interface BotApi {
   sendRichMessage(
     chatId: number,
     markdown: string,
-    opts?: { reply_markup?: InlineKeyboardMarkup },
+    opts?: { reply_markup?: InlineKeyboardMarkup; is_rtl?: boolean },
   ): Promise<{ message_id: number }>;
   editMessageText(
     chatId: number,
