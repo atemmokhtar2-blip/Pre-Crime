@@ -243,27 +243,18 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (action === "warn") {
       const count = await repo.addWarning(gid, userId, 0, base);
       await repo.addAudit(gid, 0, actorLabel, "warn", targetName, { reason: base, automatic: true, count });
-      // Native Telegram rich warning card with a direct entry point to the bot.
+      // Compact, vertical warning card: only the four requested fields.
       try {
         const safe = (value: string) => value.replace(/[\\*_\\[\\]()~`>#+=|{}.!-]/g, "\\$&");
         const safeName = safe(targetName);
-        const safeReason = safe(base);
-        const botInfo = await bot.getMe().catch(() => null);
-        const keyboard: InlineKeyboardButton[][] = botInfo?.username
-          ? [[{ text: "🤖 افتح PRE-CRIME", url: `https://t.me/${botInfo.username}`, style: "primary" }]]
-          : [];
+        const reasonLabel = violations.includes("word") ? "كلمات مسيئة" : base;
+        const safeReason = safe(reasonLabel);
         const warningMarkdown =
-          `# ⚠️ تنبيه إداري\n\n` +
-          `**⌯︙ تحذير للمستخدم**\n` +
-          `**👤 العضو:** ${safeName}\n` +
-          `**📌 السبب:** ${safeReason}\n` +
-          `**🔢 عدد التحذيرات:** ${count}\n\n` +
-          `━━━━━━━━━━━━━━━━━━\n` +
-          (count >= settings.protection.punishment.warningsBeforeAction && settings.protection.punishment.warningsBeforeAction > 0
-            ? `⛔ **تم الوصول إلى حد التحذيرات.**\n`
-            : `⌁ يرجى الالتزام بقواعد المجموعة لتجنب الإجراء التالي.\n`) +
-          `\n**PRE-CRIME**  ⌯︙ نظام حماية المجموعة`;
-        await bot.sendRichMessage(gid, warningMarkdown, keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : undefined);
+          `**⌯︙ تحذير المستخدم**\\n\\n` +
+          `**👤 العضو**\\n${safeName}\\n\\n` +
+          `**📌 السبب**\\n${safeReason}\\n\\n` +
+          `**🔢 عدد التحذيرات**\\n${count}`;
+        await bot.sendRichMessage(gid, warningMarkdown);
       } catch (richError) {
         console.error("telegram_group_warning_rich_fallback", {
           chatId: gid,
@@ -272,7 +263,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         try {
           await bot.sendMessage(
             gid,
-            `⚠️ ︙ تـنـبـيـه إداري\n━━━━━━━━━━━━━━━━━━\n⌯︙ العضو: ${targetName}\n⌯︙ السبب: ${base}\n⌯︙ عدد التحذيرات: ${count}\n━━━━━━━━━━━━━━━━━━\nPRE-CRIME • نظام حماية المجموعة`,
+            `**⌯︙ تحذير المستخدم**\\n\\n👤 العضو\\n${targetName}\\n\\n📌 السبب\\n${violations.includes("word") ? "كلمات مسيئة" : base}\\n\\n🔢 عدد التحذيرات\\n${count}`,
           );
         } catch (error) {
           console.error("telegram_group_warning_failed", {
