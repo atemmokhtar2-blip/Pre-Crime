@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 type Check = "ok" | "missing" | "failed" | "schema_missing";
 
 async function telegramCall(token: string, method: string, body?: object) {
-  const response = await fetch(\`https://api.telegram.org/bot\${token}/\${method}\`, {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: body ? "POST" : "GET",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -31,9 +31,9 @@ export async function GET() {
   if (databaseUrl) {
     try {
       const sql = neon(databaseUrl);
-      await sql\`SELECT 1 AS healthy\`;
+      await sql`SELECT 1 AS healthy`;
       checks.database = "ok";
-      await sql\`
+      await sql`
         CREATE TABLE IF NOT EXISTS telegram_updates (
           update_id BIGINT PRIMARY KEY,
           update_type TEXT NOT NULL,
@@ -44,10 +44,10 @@ export async function GET() {
             CHECK (status IN ('received','processing','processed','failed')),
           error_code TEXT
         )
-      \`;
-      const rows = await sql\`
+      `;
+      const rows = await sql`
         SELECT to_regclass('public.telegram_updates') IS NOT NULL AS present
-      \`;
+      `;
       checks.database_schema = rows[0]?.present === true ? "ok" : "schema_missing";
     } catch {
       checks.database = "failed";
