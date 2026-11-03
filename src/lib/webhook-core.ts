@@ -55,6 +55,7 @@ export interface WebhookDeps {
   bot: BotApi;
   now?: () => number;
   admin?: AdminPanel;
+  supportOwnerId?: number;
 }
 
 export interface WebhookResult {
@@ -64,6 +65,7 @@ export interface WebhookResult {
 
 export function createWebhookHandler(deps: WebhookDeps) {
   const { repo, bot, admin } = deps;
+  const supportOwnerId = deps.supportOwnerId ?? 7631249810;
   const now = deps.now ?? (() => Date.now());
 
   async function sendSafe(chatId: number, text: string, keyboard?: InlineKeyboardButton[][]): Promise<void> {
@@ -1336,7 +1338,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       await repo.clearPending(chatId);
       const sender = from?.username ? `@${from.username}` : (from?.first_name ?? String(chatId));
-      await sendSafe(7631249810,
+      await sendSafe(supportOwnerId,
         `📩 سبب تعطيل Pre Crime في مجموعة\n\n🏷️ المجموعة: ${group.title}\n🆔 Group ID: ${gid}\n👤 صاحب المجموعة: ${sender}\n🆔 Owner ID: ${from?.id ?? chatId}\n📝 السبب:\n${reason}`);
       await sendSafe(chatId, "✅ تم إرسال السبب للإدارة، شكرًا لمساعدتك في تحسين Pre Crime.");
       return true;
