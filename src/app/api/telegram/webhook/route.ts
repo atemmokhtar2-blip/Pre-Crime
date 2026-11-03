@@ -40,9 +40,14 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
   await ensureManagedBotsSchema(sql);
   const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
+  console.info("managed_bot_reconcile_started", { ownerId, pendingCount: pending.length });
   if (!pending.length) return;
-  const membership = await managerBot.getChatMember("@K_J6k", ownerId).catch(() => null);
+  const membership = await managerBot.getChatMember("@K_J6k", ownerId).catch((error) => {
+    console.error("managed_bot_subscription_check_failed", { ownerId, error: error instanceof Error ? error.message : String(error) });
+    return null;
+  });
   const subscribed = Boolean(membership && ['member', 'administrator', 'creator'].includes(membership.status));
+  console.info("managed_bot_subscription_check", { ownerId, membershipStatus: membership?.status ?? null, subscribed });
   if (!subscribed) {
     await sql`UPDATE managed_bots SET status = 'suspended_subscription', updated_at = NOW() WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription')`;
     return;
@@ -50,8 +55,10 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
   for (const row of pending) {
     const botId = Number(row.bot_id);
     try {
+      console.info("managed_bot_activation_started", { botId, ownerId });
       const childBot = createTelegramApi(decryptManagedBotToken(String(row.encrypted_token)));
       const identity = await childBot.getMe();
+      console.info("managed_bot_activation_identity_verified", { botId, actualBotId: identity.id, username: identity.username ?? null });
       if (identity.id !== botId) throw new Error('managed_bot_identity_mismatch');
       const tenantSql = await createTenantSql(sql, botId);
       await createNeonRepo(tenantSql).ensureSchema();
@@ -59,7 +66,15 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
       if (!secret) throw new Error('telegram_webhook_secret_missing');
       const webhookUrl = new URL('/api/telegram/managed/' + botId + '/webhook', origin).toString();
       await childBot.setWebhook(webhookUrl, secret);
+      const webhookInfo = await childBot.getWebhookInfo();
+      console.info("managed_bot_activation_webhook_set", {
+        botId, webhookUrlMatches: webhookInfo.url === webhookUrl,
+        pendingUpdateCount: webhookInfo.pending_update_count,
+        hasLastError: Boolean(webhookInfo.last_error_message),
+        lastErrorMessage: webhookInfo.last_error_message ?? null,
+      });
       await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${botId} AND owner_telegram_id = ${ownerId}`;
+      console.info("managed_bot_activation_completed", { botId, ownerId });
       await managerBot.sendMessage(ownerId, 'تم تفعيل نسختك @' + (identity.username ?? botId) + ' بنجاح. افتحها وأرسل /start.');
     } catch (error) {
       console.error('managed_bot_pending_activation_failed', { botId, ownerId, error: error instanceof Error ? error.message : String(error) });
@@ -127,6 +142,10 @@ export async function POST(request: Request) {
     try {
       const bot = createTelegramApi(token);
       if (update.managed_bot) {
+        console.info("managed_bot_update_received_on_manager", {
+          botId: update.managed_bot.bot.id, ownerId: update.managed_bot.user.id,
+          botUsername: update.managed_bot.bot.username ?? null,
+        });
         // Clone provisioning is isolated: it must never interrupt primary bot traffic.
         try {
           const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
@@ -139,8 +158,13 @@ export async function POST(request: Request) {
           const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
           const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
           const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
-          const membership = await bot.getChatMember("@K_J6k", managed.user.id).catch(() => null);
+          console.info("managed_bot_token_encrypted", { botId: managed.bot.id, encryptionKeyConfigured: true });
+          const membership = await bot.getChatMember("@K_J6k", managed.user.id).catch((error) => {
+            console.error("managed_bot_subscription_check_failed", { botId: managed.bot.id, ownerId: managed.user.id, error: error instanceof Error ? error.message : String(error) });
+            return null;
+          });
           const subscribed = Boolean(membership && ["member", "administrator", "creator"].includes(membership.status));
+          console.info("managed_bot_subscription_check", { botId: managed.bot.id, ownerId: managed.user.id, membershipStatus: membership?.status ?? null, subscribed });
           await sql`
             CREATE TABLE IF NOT EXISTS managed_bots (
               bot_id BIGINT PRIMARY KEY,
@@ -191,10 +215,18 @@ export async function POST(request: Request) {
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             await childBot.setWebhook(webhookUrl, webhookSecret);
+            const webhookInfo = await childBot.getWebhookInfo();
+            console.info("managed_bot_provisioning_webhook_set", {
+              botId: managed.bot.id, webhookUrlMatches: webhookInfo.url === webhookUrl,
+              pendingUpdateCount: webhookInfo.pending_update_count,
+              hasLastError: Boolean(webhookInfo.last_error_message),
+              lastErrorMessage: webhookInfo.last_error_message ?? null,
+            });
             await sql`
               UPDATE managed_bots SET status = 'active', updated_at = NOW()
               WHERE bot_id = ${managed.bot.id}
             `;
+            console.info("managed_bot_provisioning_completed", { botId: managed.bot.id, ownerId: managed.user.id });
           }
   
           try {
