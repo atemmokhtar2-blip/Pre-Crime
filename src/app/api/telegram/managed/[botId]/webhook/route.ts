@@ -116,7 +116,7 @@ export async function POST(
     stage = "claim_update";
     console.info("managed_bot_update_received", {
       botId, updateId: update.update_id, updateType: updateType(update),
-      chatId: chatIdOf(update), isStart: Boolean(update.message?.text?.trim().match(/^\\/start(?:@\\w+)?(?:\\s|$)/i)),
+      chatId: chatIdOf(update), isStart: Boolean(update.message?.text?.trim().match(/^\/start(?:@\w+)?(?:\s|$)/i)),
     });
     const claimed = await tenantSql`
       INSERT INTO telegram_updates (update_id, update_type, chat_id, status)
