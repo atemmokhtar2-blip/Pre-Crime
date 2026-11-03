@@ -41,7 +41,7 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
   await ensureManagedBotsSchema(sql);
   const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
   if (!pending.length) return;
-  const membership = await managerBot.getChatMember(-1004463431688, ownerId).catch(() => null);
+  const membership = await managerBot.getChatMember("@K_J6k", ownerId).catch(() => null);
   const subscribed = Boolean(membership && ['member', 'administrator', 'creator'].includes(membership.status));
   if (!subscribed) {
     await sql`UPDATE managed_bots SET status = 'suspended_subscription', updated_at = NOW() WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription')`;
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
           const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
           const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
           const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
-          const membership = await bot.getChatMember(-1004463431688, managed.user.id).catch(() => null);
+          const membership = await bot.getChatMember("@K_J6k", managed.user.id).catch(() => null);
           const subscribed = Boolean(membership && ["member", "administrator", "creator"].includes(membership.status));
           await sql`
             CREATE TABLE IF NOT EXISTS managed_bots (
