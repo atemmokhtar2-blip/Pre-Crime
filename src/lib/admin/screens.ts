@@ -33,17 +33,22 @@ const btn = (text: string, key: string, ...args: (string | number)[]): InlineKey
 
 // ============ 1. الرئيسية ============
 
-export function screenHome(): Screen {
-  return {
-    text: "👑 PRE CRIME  /  ADMIN",
-    keyboard: [
-      [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
-      [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
-      [btn("📣 الإذاعة", "bcast"), btn("🛡️ الحماية العامة", "prot")],
-      [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
+export function screenHome(tenantMode = false): Screen {
+  const keyboard: InlineKeyboardButton[][] = [
+    [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
+    [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
+    [btn("📣 الإذاعة", "bcast"), btn("🛡️ الحماية العامة", "prot")],
+    [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
+  ];
+  if (!tenantMode) {
+    keyboard.push(
       [btn("⚙️ إعدادات النظام", "sys"), btn("🖥️ السيرفر", "infra")],
       [btn("🚨 أدوات الطوارئ", "emerg")],
-    ],
+    );
+  }
+  return {
+    text: tenantMode ? "👑 لوحة إدارة نسختك الخاصة" : "👑 PRE CRIME  /  ADMIN",
+    keyboard,
   };
 }
 
