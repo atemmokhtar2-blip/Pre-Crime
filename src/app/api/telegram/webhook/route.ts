@@ -33,11 +33,18 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
       bot_display_name TEXT NOT NULL DEFAULT '',
       encrypted_token TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending_isolation'
-        CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+        CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  const statusConstraint = await sql`SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'managed_bots'::regclass AND conname = 'managed_bots_status_check' LIMIT 1`;
+  if (statusConstraint.length && !String(statusConstraint[0].definition ?? "").includes("paused")) {
+    await sql`ALTER TABLE managed_bots DROP CONSTRAINT managed_bots_status_check`;
+  }
+  if (!statusConstraint.length || !String(statusConstraint[0].definition ?? "").includes("paused")) {
+    await sql`ALTER TABLE managed_bots ADD CONSTRAINT managed_bots_status_check CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused'))`;
+  }
   await ensureSingleManagedBotPerOwner(sql);
 }
 
@@ -200,7 +207,7 @@ export async function POST(request: Request) {
               bot_display_name TEXT NOT NULL DEFAULT '',
               encrypted_token TEXT NOT NULL,
               status TEXT NOT NULL DEFAULT 'pending_isolation'
-                CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+                CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
               created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
@@ -312,14 +319,14 @@ export async function POST(request: Request) {
         async stop(botId) {
           const rows = await sql`SELECT encrypted_token FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
           if (!rows[0]) throw new Error("النسخة غير موجودة.");
-          await sql`UPDATE managed_bots SET status = 'failed', updated_at = NOW() WHERE bot_id = ${botId}`;
+          await sql`UPDATE managed_bots SET status = 'paused', updated_at = NOW() WHERE bot_id = ${botId}`;
           const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
           await child.deleteWebhook(false);
         },
         async resume(botId) {
           const rows = await sql`SELECT encrypted_token, status FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
           if (!rows[0]) throw new Error("النسخة غير موجودة.");
-          if (String(rows[0].status) !== "failed") throw new Error("لا يمكن إعادة تشغيل النسخة من حالتها الحالية.");
+          if (String(rows[0].status) !== "paused") throw new Error("لا يمكن إعادة تشغيل النسخة من حالتها الحالية.");
           const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
           const identity = await child.getMe();
           if (identity.id !== botId) throw new Error("فشل التحقق من هوية البوت.");
@@ -416,7 +423,7 @@ export async function POST(request: Request) {
                 bot_display_name TEXT NOT NULL DEFAULT '',
                 encrypted_token TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending_isolation'
-                  CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+                  CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
               )

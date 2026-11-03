@@ -341,7 +341,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         const filter = key === "mb_list" ? args[0] ?? "all" : args[1] ?? "all";
         const page = key === "mb_list" ? numArg(1) ?? 0 : numArg(0) ?? 0;
         const all = await deps.managedBots.list();
-        const filtered = filter === "active" ? all.filter((b) => b.status === "active") : filter === "stopped" ? all.filter((b) => b.status === "failed") : all;
+        const filtered = filter === "active" ? all.filter((b) => b.status === "active") : filter === "stopped" ? all.filter((b) => b.status === "paused") : all;
         await ack(update.id);
         await showScreen(screenManagedBotList(filtered, filter, page));
         return true;

@@ -781,7 +781,7 @@ export interface ManagedBotAdminRow {
 
 export function screenManagedBotList(bots: ManagedBotAdminRow[], filter: string, page: number): Screen {
   const p = paginate(bots, page);
-  const status = (s: string) => s === "active" ? "🟢" : s === "failed" ? "⏸️" : s === "deleting" ? "🗑️" : s === "suspended_subscription" ? "🔒" : "🟡";
+  const status = (s: string) => s === "active" ? "🟢" : s === "paused" ? "⏸️" : s === "deleting" ? "🗑️" : s === "suspended_subscription" ? "🔒" : "🟡";
   const keyboard: InlineKeyboardButton[][] = [
     [btn("📋 الكل", "mb_list", "all", 0), btn("🟢 النشطة", "mb_list", "active", 0), btn("⏸️ المتوقفة", "mb_list", "stopped", 0)],
     ...p.items.map((b) => [{ text: `${status(b.status)} ${trunc(b.bot_username ? "@" + b.bot_username : b.bot_display_name || String(b.bot_id), 22)} · ${b.owner_telegram_id}`, callback_data: ac("mb_view", b.bot_id) }]),
@@ -792,10 +792,10 @@ export function screenManagedBotList(bots: ManagedBotAdminRow[], filter: string,
 }
 
 export function screenManagedBotDetail(b: ManagedBotAdminRow): Screen {
-  const status = b.status === "active" ? "🟢 نشطة" : b.status === "failed" ? "⏸️ متوقفة" : b.status === "deleting" ? "🗑️ قيد الحذف" : b.status === "suspended_subscription" ? "🔒 اشتراك معلّق" : "🟡 قيد التفعيل";
+  const status = b.status === "active" ? "🟢 نشطة" : b.status === "paused" ? "⏸️ متوقفة" : b.status === "deleting" ? "🗑️ قيد الحذف" : b.status === "suspended_subscription" ? "🔒 اشتراك معلّق" : "🟡 قيد التفعيل";
   const keyboard: InlineKeyboardButton[][] = [];
   if (b.status === "active" || b.status === "pending_isolation" || b.status === "suspended_subscription") keyboard.push([btn("⏸️ إيقاف النسخة", "mb_stop", b.bot_id)]);
-  else if (b.status === "failed") keyboard.push([btn("▶️ إعادة تشغيل النسخة", "mb_resume", b.bot_id)]);
+  else if (b.status === "paused") keyboard.push([btn("▶️ إعادة تشغيل النسخة", "mb_resume", b.bot_id)]);
   if (b.status !== "deleting") keyboard.push([btn("🗑️ حذف نهائي للنسخة", "mb_delete", b.bot_id)]);
   keyboard.push([refresh("mb_view", b.bot_id), back("mb_list", "all", 0)]);
   return { text: [
