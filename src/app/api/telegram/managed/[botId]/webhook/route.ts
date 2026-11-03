@@ -191,7 +191,7 @@ export async function POST(
     }
 
     try {
-      // Enforce the primary channel subscription for private bot usage.
+      // Enforce the primary platform channel plus tenant-configured channels.
       // Group moderation remains active even for non-subscribed group members.
       const actor = update.message?.from ?? update.edited_message?.from ?? update.callback_query?.from;
       const privateChatId =
@@ -205,8 +205,16 @@ export async function POST(
         const managerToken = process.env.TELEGRAM_BOT_TOKEN;
         if (!managerToken) throw new Error("primary_bot_token_missing_for_subscription_check");
         const managerBot = createTelegramApi(managerToken);
-        const membership = await managerBot.getChatMember("@K_J6k", actor.id);
-        const subscribed = ["member", "administrator", "creator"].includes(membership.status);
+        const config = await adminStore.getConfig();
+        const extraChannels = (config.subscriptionChannels ?? []).filter((value) => /^@[A-Za-z0-9_]{5,32}$/.test(value));
+        const missingChannels: string[] = [];
+        const primaryMembership = await managerBot.getChatMember("@K_J6k", actor.id);
+        if (!["member", "administrator", "creator"].includes(primaryMembership.status)) missingChannels.push("@K_J6k");
+        for (const channel of extraChannels) {
+          const membership = await bot.getChatMember(channel, actor.id);
+          if (!["member", "administrator", "creator"].includes(membership.status)) missingChannels.push(channel);
+        }
+        const subscribed = missingChannels.length === 0;
 
         if (update.callback_query?.data === "subscription_check" && subscribed) {
           await bot.answerCallbackQuery(update.callback_query.id, { text: "تم التحقق من اشتراكك بنجاح ✅" });
@@ -219,19 +227,19 @@ export async function POST(
           const markup = {
             reply_markup: {
               inline_keyboard: [
-                [{ text: "📢 الاشتراك في القناة", url: "https://t.me/K_J6k" }],
+                ...missingChannels.map((channel) => [{ text: `📢 الاشتراك في ${channel}`, url: "https://t.me/" + channel.replace(/^@/, "") }]),
                 [{ text: "🔄 تحقق من الاشتراك", callback_data: "subscription_check" }],
               ],
             },
           };
           if (update.callback_query) {
             await bot.answerCallbackQuery(update.callback_query.id, {
-              text: "🔒 يجب الاشتراك في قناة Pre Crime أولًا.",
+              text: "🔒 يجب الاشتراك في جميع قنوات الاشتراك الإجباري أولًا.",
               show_alert: true,
             });
-            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك أولًا في قناة Pre Crime ثم اضغط تحقق من الاشتراك.", markup);
+            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك في القنوات المطلوبة ثم اضغط تحقق من الاشتراك.", markup);
           } else {
-            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك أولًا في قناة Pre Crime ثم اضغط تحقق من الاشتراك.", markup);
+            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك في القنوات المطلوبة ثم اضغط تحقق من الاشتراك.", markup);
           }
           await tenantSql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
           return Response.json({ ok: true, processed: true, subscription_required: true });
