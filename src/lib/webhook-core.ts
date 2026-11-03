@@ -1180,7 +1180,15 @@ export function createWebhookHandler(deps: WebhookDeps) {
       const existing = await repo.getGroup(chat.id);
       if (existing) await repo.upsertGroup({ ...existing, status: removed ? "left" : "paused" });
       await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", removed ? "bot_removed" : "bot_permissions_revoked", { oldStatus, newStatus });
-      await sendGroupNotice(chat.id, "⚠️ تم تعطيل صلاحياتي في المجموعة دي.\nسبب التعطيل: تمت إزالة Pre Crime من المجموعة أو سحب صلاحيات المشرف.");
+      // Telegram does not allow a bot to post after it has been removed.
+      // Show the styled notice in-group only while the bot is still a member.
+      if (permissionsRevoked) {
+        const botUsername = (await bot.getMe()).username ?? "precrime_bot";
+        await sendSafe(chat.id,
+          "⚠️ **تنبيه — الحماية متوقفة**\n\nتم تعطيل صلاحيات Pre Crime في هذه المجموعة.\n\n🔒 لن تعمل أدوات الحماية حتى يتم منح البوت صلاحيات المشرف مرة أخرى.",
+          [[{ text: "➕ إعادة تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=activate` }]],
+        );
+      }
       const ownerId = existing?.owner_user_id;
       if (ownerId != null) {
         const botUsername = (await bot.getMe()).username ?? "precrime_bot";
