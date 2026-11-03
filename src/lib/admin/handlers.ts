@@ -1573,7 +1573,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     switch (pending.action) {
       case "adm_sub_add": {
         await repo.clearPending(chatId);
-        const username = input.replace(/^https?:\\/\\/(www\\.)?t\\.me\\//i, "").replace(/^@/, "").replace(/\\/$/, "");
+        const username = input.replace(/^https?:\/\/(www\.)?t\.me\//i, "").replace(/^@/, "").replace(/\/$/, "");
         if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) {
           await bot.sendMessage(chatId, "⚠️ أرسل Username صحيحًا لقناة عامة مثل @MyChannel.");
           return true;
