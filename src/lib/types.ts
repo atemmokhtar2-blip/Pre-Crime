@@ -122,7 +122,8 @@ export interface ModerationRow {
 // ---- Injected boundaries (dependency injection for testability) ----
 
 export interface BotApi {
-  getMe(): Promise<{ id: number; username?: string; first_name?: string }>;
+  getMe(): Promise<{ id: number; username?: string; first_name?: string; can_manage_bots?: boolean }>;
+  getManagedBotToken(userId: number): Promise<string>;
   sendMessage(
     chatId: number,
     text: string,
@@ -141,7 +142,7 @@ export interface BotApi {
   ): Promise<unknown>;
   answerCallbackQuery(callbackQueryId: string, opts?: { text?: string; show_alert?: boolean }): Promise<unknown>;
   deleteMessage(chatId: number, messageId: number): Promise<unknown>;
-  getChat(chatId: number): Promise<{ id: number; title?: string; username?: string; type: string }>;
+  getChat(chatId: number): Promise<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>;
   getChatMember(chatId: number, userId: number): Promise<ChatMemberInfo>;
   getChatMemberCount(chatId: number): Promise<number>;
   getChatAdministrators(chatId: number): Promise<Array<{ user: { id: number }; status: string }>>;
@@ -273,6 +274,7 @@ export interface TelegramMessage {
 
 export interface TelegramUpdate {
   update_id: number;
+  managed_bot?: { user: TelegramFrom; bot: { id: number; is_bot: true; username?: string; first_name?: string } };
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
   my_chat_member?: {

@@ -26,7 +26,10 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
 
   return {
     async getMe() {
-      return call<{ id: number; username?: string; first_name?: string }>("getMe");
+      return call<{ id: number; username?: string; first_name?: string; can_manage_bots?: boolean }>("getMe");
+    },
+    async getManagedBotToken(userId) {
+      return call<string>("getManagedBotToken", { user_id: userId });
     },
     async sendRichMessage(chatId, markdown, opts) {
       return call<{ message_id: number }>("sendRichMessage", {
@@ -63,7 +66,7 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       return call<unknown>("deleteMessage", { chat_id: chatId, message_id: messageId });
     },
     async getChat(chatId) {
-      return call<{ id: number; title?: string; username?: string; type: string }>("getChat", { chat_id: chatId });
+      return call<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>("getChat", { chat_id: chatId });
     },
     async getChatMember(chatId, userId) {
       return call<ChatMemberInfo>("getChatMember", { chat_id: chatId, user_id: userId });
@@ -110,7 +113,7 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       return call<{ url: string; pending_update_count: number; last_error_message?: string; max_connections?: number }>("getWebhookInfo");
     },
     async setWebhook(url, secretToken) {
-      const body: Record<string, unknown> = { url, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "chat_join_request"] };
+      const body: Record<string, unknown> = { url, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "chat_join_request", "managed_bot"] };
       if (secretToken) body.secret_token = secretToken;
       return call<boolean>("setWebhook", body);
     },

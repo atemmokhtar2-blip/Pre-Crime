@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createCipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { createNeonRepo, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
@@ -71,6 +71,55 @@ export async function POST(request: Request) {
 
     try {
       const bot = createTelegramApi(token);
+      if (update.managed_bot) {
+        const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? "";
+        if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) {
+          throw new Error("managed_bot_encryption_key_missing_or_invalid");
+        }
+        const managed = update.managed_bot;
+        const childToken = await bot.getManagedBotToken(managed.bot.id);
+        const iv = randomBytes(12);
+        const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
+        const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
+        const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
+        const membership = await bot.getChatMember(-1004463431688, managed.user.id).catch(() => null);
+        const subscribed = Boolean(membership && ["member", "administrator", "creator"].includes(membership.status));
+        await sql`
+          CREATE TABLE IF NOT EXISTS managed_bots (
+            bot_id BIGINT PRIMARY KEY,
+            owner_telegram_id BIGINT NOT NULL,
+            owner_username TEXT,
+            bot_username TEXT,
+            bot_display_name TEXT NOT NULL DEFAULT '',
+            encrypted_token TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending_isolation'
+              CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `;
+        await sql`
+          INSERT INTO managed_bots
+            (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
+          VALUES
+            (${managed.bot.id}, ${managed.user.id}, ${managed.user.username ?? null},
+             ${managed.bot.username ?? null}, ${managed.bot.first_name ?? ""}, ${tokenCiphertext},
+             ${subscribed ? "pending_isolation" : "suspended_subscription"})
+          ON CONFLICT (bot_id) DO UPDATE SET
+            owner_telegram_id = EXCLUDED.owner_telegram_id,
+            owner_username = EXCLUDED.owner_username,
+            bot_username = EXCLUDED.bot_username,
+            bot_display_name = EXCLUDED.bot_display_name,
+            encrypted_token = EXCLUDED.encrypted_token,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        `;
+        try {
+          await bot.sendMessage(managed.user.id, subscribed
+            ? "✅ تم استلام بوتك الخاص بنجاح. جاري استكمال إعداد قاعدة البيانات المعزولة قبل تفعيله."
+            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ أعد الاشتراك ليتم استكمال التفعيل.");
+        } catch { /* the owner may not have opened the manager bot */ }
+      }
       const ownerIds = (process.env.BOT_OWNER_IDS ?? "")
         .split(",")
         .map((value) => Number(value.trim()))
@@ -122,6 +171,7 @@ function updateType(update: TelegramUpdate): string {
   if (update.my_chat_member) return "my_chat_member";
   if (update.chat_member) return "chat_member";
   if (update.chat_join_request) return "chat_join_request";
+  if (update.managed_bot) return "managed_bot";
   return "unknown";
 }
 

@@ -251,7 +251,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     await store.touchAdmin(from.id);
-    await show(message.chat.id, null, await buildHome(from));
+    await show(message.chat.id, null, await screenHome());
     return true;
   }
 
@@ -311,7 +311,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     switch (key) {
       case "home":
         await ack(update.id);
-        await showScreen(buildHome(from));
+        await showScreen(screenHome());
         return true;
 
       // ============ المستخدمون ============
