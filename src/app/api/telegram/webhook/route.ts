@@ -292,7 +292,14 @@ export async function POST(request: Request) {
         if (pending?.action === "clone_token" && pending.context.ownerId === update.message.from.id) {
           const ownerId = update.message.from.id;
           const rawToken = update.message.text.trim();
-          await bot.deleteMessage(update.message.chat.id, update.message.message_id).catch(() => undefined);
+          try {
+            await bot.deleteMessage(update.message.chat.id, update.message.message_id);
+          } catch {
+            await repo.clearPending(ownerId);
+            await bot.sendMessage(ownerId, "⛔ تعذر حذف رسالة التوكن، لذلك أوقفنا التفعيل لحماية حسابك. ألغِ هذا التوكن من BotFather وأنشئ توكنًا جديدًا قبل إعادة المحاولة.");
+            await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = 'token_message_delete_failed' WHERE update_id = ${update.update_id}`;
+            return Response.json({ ok: true, processed: true });
+          }
           if (!/^\d{5,15}:[A-Za-z0-9_-]{20,}$/.test(rawToken)) {
             await bot.sendMessage(ownerId, "⚠️ صيغة التوكن غير صحيحة. أرسل التوكن كما نسخته من BotFather.");
             await sql`UPDATE pending_actions SET created_at = NOW() WHERE chat_id = ${ownerId} AND action = 'clone_token'`;
