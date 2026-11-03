@@ -650,18 +650,19 @@ export function createWebhookHandler(deps: WebhookDeps) {
       return;
     }
 
-    if (section === "removal_reason") {
-      if (chat.type !== "private" || gid == null) {
-        await ack(update.id, "هذا الإجراء متاح من الخاص فقط.", true);
-        return;
-      }
+    if (section === "removal_reason" || section === "removal_cancel") {
+      if (chat.type !== "private" || gid == null) { await ack(update.id, "هذا الإجراء متاح من الخاص فقط.", true); return; }
       const group = await repo.getGroup(gid);
-      if (!group || group.owner_user_id !== actorId) {
-        await ack(update.id, "هذا الطلب مخصص لصاحب المجموعة الذي أضاف البوت.", true);
+      if (!group || group.owner_user_id !== actorId) { await ack(update.id, "هذا الطلب مخصص لصاحب المجموعة الذي أضاف البوت.", true); return; }
+      if (section === "removal_cancel") {
+        const pending = await repo.getPending(chatId);
+        if (pending?.action === "bot_removed_reason" && pending.group_id === gid) await repo.clearPending(chatId);
+        await sendSafe(chatId, "تم إلغاء كتابة السبب.");
+        await ack(update.id, "تم الإلغاء.");
         return;
       }
       await repo.setPending({ chat_id: chatId, group_id: gid, action: "bot_removed_reason", context: { ownerId: actorId } });
-      await sendSafe(chatId, "• اوكـي تفضـل بكتابة السبب او المشكلة", undefined);
+      await sendSafe(chatId, "• اوكـي — تفضـل بكتابة السبب او المشكلة", [[{ text: "❌ إلغاء", callback_data: encodeCallback("removal_cancel", gid) }]]);
       await ack(update.id, "اكتب السبب في رسالة منفصلة.");
       return;
     }
@@ -1174,11 +1175,12 @@ export function createWebhookHandler(deps: WebhookDeps) {
       const existing = await repo.getGroup(chat.id);
       if (existing) await repo.upsertGroup({ ...existing, status: removed ? "left" : "paused" });
       await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", removed ? "bot_removed" : "bot_permissions_revoked", { oldStatus, newStatus });
+      await sendGroupNotice(chat.id, "⚠️ تم تعطيل صلاحياتي في المجموعة دي.\nسبب التعطيل: تمت إزالة Pre Crime من المجموعة أو سحب صلاحيات المشرف.");
       const ownerId = existing?.owner_user_id;
       if (ownerId != null) {
         const botUsername = (await bot.getMe()).username ?? "precrime_bot";
         await sendSafe(ownerId,
-          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing?.title ?? chat.title ?? "المجموعة"}»\n\n${removed ? "تمت إزالة PRE CRIME من المجموعة." : "تم سحب صلاحيات المشرف من PRE CRIME."}\nيمكنك إعادة إضافته ومنحه صلاحيات المشرف للتفعيل.`,
+          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing?.title ?? chat.title ?? "المجموعة"}»\n\nيمكنك إعادة إضافة Pre Crime ومنحه صلاحيات المشرف للتفعيل.`,
           [[{ text: "➕ تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=activate` }],
            [{ text: "✍️ كتابة السبب", callback_data: encodeCallback("removal_reason", chat.id) }]],
         );
@@ -1248,12 +1250,19 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (!pending) return false;
     const gid = pending.group_id;
     if (pending.action === "bot_removed_reason") {
-      await repo.clearPending(chatId);
+      const reason = text.trim();
+      if (reason.length < 5 || reason.length > 1000) { await sendSafe(chatId, "⚠️ السبب غير صالح. اكتب سببًا واضحًا من 5 إلى 1000 حرف."); return true; }
       const group = await repo.getGroup(gid);
+      if (!group || group.owner_user_id !== from?.id || group.status === "active") {
+        await repo.clearPending(chatId);
+        await sendSafe(chatId, "⚠️ تعذر التحقق من ملكية المجموعة أو أن البوت عاد للعمل بالفعل. أعد المحاولة من رسالة التعطيل.");
+        return true;
+      }
+      await repo.clearPending(chatId);
       const sender = from?.username ? `@${from.username}` : (from?.first_name ?? String(chatId));
       await sendSafe(7631249810,
-        `📩 سبب إزالة PRE CRIME من مجموعة\n\n🏷️ المجموعة: ${group?.title ?? "غير معروفة"}\n🆔 Group ID: ${gid}\n👤 صاحب المجموعة: ${sender}\n📝 السبب:\n${text.trim()}`);
-      await sendSafe(chatId, "✅ تم إرسال السبب للإدارة، شكرًا لمساعدتك في تحسين PRE CRIME.");
+        `📩 سبب تعطيل Pre Crime في مجموعة\n\n🏷️ المجموعة: ${group.title}\n🆔 Group ID: ${gid}\n👤 صاحب المجموعة: ${sender}\n🆔 Owner ID: ${from?.id ?? chatId}\n📝 السبب:\n${reason}`);
+      await sendSafe(chatId, "✅ تم إرسال السبب للإدارة، شكرًا لمساعدتك في تحسين Pre Crime.");
       return true;
     }
     const access = await authorize(gid, from?.id);
