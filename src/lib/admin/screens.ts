@@ -2,7 +2,6 @@
 // panel renders. Pure builders: no I/O, fully unit-testable.
 
 import type { InlineKeyboardButton } from "../types";
-import type { AuditRow } from "../types";
 import {
   ADMIN_PERMISSIONS,
   ENGINE_LABELS,
@@ -32,29 +31,11 @@ const back = (to: string, ...args: (string | number)[]): InlineKeyboardButton =>
 const refresh = (to: string, ...args: (string | number)[]): InlineKeyboardButton => ({ text: "🔄 تحديث", callback_data: ac(to, ...args) });
 const btn = (text: string, key: string, ...args: (string | number)[]): InlineKeyboardButton => ({ text, callback_data: ac(key, ...args) });
 
-// ============ 1. الرئيسية / الإحصائيات العامة ============
+// ============ 1. الرئيسية ============
 
-export interface OverviewStats {
-  users: number;
-  groups: number;
-  activeGroups: number;
-  pausedGroups: number;
-  leftGroups: number;
-  admins: number;
-  activeLicenses: number;
-  activity24h: number;
-}
-
-export function screenHome(stats: OverviewStats, _recent: AuditRow[], _actorName: string): Screen {
+export function screenHome(): Screen {
   return {
-    text: [
-      "👑 PRE CRIME  /  ADMIN",
-      "━━━━━━━━━━━━━━━",
-      `👥 المستخدمون  ${stats.users}   •   🛡️ المجموعات  ${stats.groups}`,
-      `🟢 نشطة ${stats.activeGroups}   •   🔴 معطلة ${stats.pausedGroups}   •   🚪 غادرها ${stats.leftGroups}`,
-      `👑 المديرون ${stats.admins}   •   🔑 التراخيص ${stats.activeLicenses}`,
-      `📈 نشاط 24 ساعة ${stats.activity24h}`,
-    ].join("\n"),
+    text: "👑 PRE CRIME  /  ADMIN",
     keyboard: [
       [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
       [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
@@ -62,7 +43,6 @@ export function screenHome(stats: OverviewStats, _recent: AuditRow[], _actorName
       [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
       [btn("⚙️ إعدادات النظام", "sys"), btn("🖥️ السيرفر", "infra")],
       [btn("🚨 أدوات الطوارئ", "emerg")],
-      [refresh("home")],
     ],
   };
 }
