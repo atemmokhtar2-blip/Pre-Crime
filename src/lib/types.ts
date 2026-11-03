@@ -142,8 +142,8 @@ export interface BotApi {
   ): Promise<unknown>;
   answerCallbackQuery(callbackQueryId: string, opts?: { text?: string; show_alert?: boolean }): Promise<unknown>;
   deleteMessage(chatId: number, messageId: number): Promise<unknown>;
-  getChat(chatId: number): Promise<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>;
-  getChatMember(chatId: number, userId: number): Promise<ChatMemberInfo>;
+  getChat(chatId: number | string): Promise<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>;
+  getChatMember(chatId: number | string, userId: number): Promise<ChatMemberInfo>;
   getChatMemberCount(chatId: number): Promise<number>;
   getChatAdministrators(chatId: number): Promise<Array<{ user: { id: number }; status: string }>>;
   restrictChatMember(
