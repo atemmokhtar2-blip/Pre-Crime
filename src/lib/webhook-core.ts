@@ -56,6 +56,7 @@ export interface WebhookDeps {
   now?: () => number;
   admin?: AdminPanel;
   supportOwnerId?: number;
+  adminStartPanel?: boolean;
 }
 
 export interface WebhookResult {
@@ -65,6 +66,7 @@ export interface WebhookResult {
 
 export function createWebhookHandler(deps: WebhookDeps) {
   const { repo, bot, admin } = deps;
+  const adminStartPanel = deps.adminStartPanel ?? false;
   const supportOwnerId = deps.supportOwnerId ?? 7631249810;
   const now = deps.now ?? (() => Date.now());
 
@@ -1435,15 +1437,25 @@ export function createWebhookHandler(deps: WebhookDeps) {
           return { ok: true, processed: true };
         }
         if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text)) {
-          await handleStart(update.message);
-          if (update.message.chat.type === "private" && update.message.from && admin && await admin.isAdmin(update.message.from.id)) {
-            await bot.sendMessage(update.message.chat.id, "👑 تم تفعيل وصول الأدمن. استخدم الزر لفتح لوحة الإدارة.", {
-              reply_markup: {
-                keyboard: [[{ text: "👑 لوحة الأدمن" }]],
-                resize_keyboard: true,
-                is_persistent: true,
-              },
-            });
+          if (
+            adminStartPanel &&
+            update.message.chat.type === "private" &&
+            update.message.from &&
+            admin &&
+            await admin.isAdmin(update.message.from.id)
+          ) {
+            await admin.handleCommand({ ...update.message, text: "/admin" });
+          } else {
+            await handleStart(update.message);
+            if (update.message.chat.type === "private" && update.message.from && admin && await admin.isAdmin(update.message.from.id)) {
+              await bot.sendMessage(update.message.chat.id, "👑 تم تفعيل وصول الأدمن. استخدم الزر لفتح لوحة الإدارة.", {
+                reply_markup: {
+                  keyboard: [[{ text: "👑 لوحة الأدمن" }]],
+                  resize_keyboard: true,
+                  is_persistent: true,
+                },
+              });
+            }
           }
           return { ok: true, processed: true };
         }
