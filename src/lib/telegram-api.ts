@@ -26,7 +26,10 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
 
   return {
     async getMe() {
-      return call<{ id: number; username?: string; first_name?: string }>("getMe");
+      return call<{ id: number; username?: string; first_name?: string; can_manage_bots?: boolean }>("getMe");
+    },
+    async getManagedBotToken(userId) {
+      return call<string>("getManagedBotToken", { user_id: userId });
     },
     async sendRichMessage(chatId, markdown, opts) {
       return call<{ message_id: number }>("sendRichMessage", {
