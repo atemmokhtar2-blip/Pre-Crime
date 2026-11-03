@@ -27,10 +27,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
   return value as T;
 }
 
-let adminSchemaReady = false;
-
 export async function ensureAdminSchema(sql: Sql): Promise<void> {
-  if (adminSchemaReady) return;
   await sql`
     CREATE TABLE IF NOT EXISTS bot_users (
       telegram_user_id BIGINT PRIMARY KEY,
@@ -94,12 +91,14 @@ export async function ensureAdminSchema(sql: Sql): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS licenses_status_idx ON licenses(status, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS broadcasts_created_idx ON broadcasts(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS audit_events_created_global_idx ON audit_events(created_at DESC)`;
-  adminSchemaReady = true;
 }
 
 export function createAdminStore(sql: Sql) {
+  let schemaReady = false;
   async function ready() {
+    if (schemaReady) return;
     await ensureAdminSchema(sql);
+    schemaReady = true;
   }
 
   // ---- bot users ----
