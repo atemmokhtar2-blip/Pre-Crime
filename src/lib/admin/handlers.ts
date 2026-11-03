@@ -350,12 +350,6 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         await showScreen(screenManagedBotList(await store.listManagedBots(), page));
         return true;
       }
-      case "mb_page": {
-        const page = numArg(0) ?? 0;
-        await ack(update.id);
-        await showScreen(screenManagedBotList(await store.listManagedBots(), page));
-        return true;
-      }
       case "mb_view": {
         const id = numArg(0);
         if (id == null) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
