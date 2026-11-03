@@ -53,6 +53,22 @@ export async function findLiveManagedBot(sql: Sql, ownerId: number): Promise<{ b
     : null;
 }
 
+export async function findLiveManagedBotByBotId(sql: Sql, botId: number): Promise<{ bot_id: number; owner_telegram_id: number; status: string } | null> {
+  if (!Number.isSafeInteger(botId) || botId <= 0) {
+    throw new Error("invalid_managed_bot_id");
+  }
+  const rows = await sql`
+    SELECT bot_id, owner_telegram_id, status
+    FROM managed_bots
+    WHERE bot_id = ${botId}
+      AND status IN ('pending_isolation', 'active', 'suspended_subscription')
+    LIMIT 1
+  `;
+  return rows.length
+    ? { bot_id: Number(rows[0].bot_id), owner_telegram_id: Number(rows[0].owner_telegram_id), status: String(rows[0].status) }
+    : null;
+}
+
 export function isManagedBotLimitViolation(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; constraint?: unknown };
