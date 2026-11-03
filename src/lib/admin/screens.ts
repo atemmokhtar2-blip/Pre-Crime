@@ -1,7 +1,7 @@
 // Pre-Crime super-admin panel — every screen (text + inline keyboard) the
 // panel renders. Pure builders: no I/O, fully unit-testable.
 
-import type { InlineKeyboardButton } from "../types";
+import type { AuditRow, InlineKeyboardButton } from "../types";
 import {
   ADMIN_PERMISSIONS,
   ENGINE_LABELS,
