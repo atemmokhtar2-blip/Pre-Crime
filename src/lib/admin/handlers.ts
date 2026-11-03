@@ -242,7 +242,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
 
   async function handleCommand(message: TelegramMessage): Promise<boolean> {
     const text = (message.text ?? "").trim();
-    if (!/^\/(admin|panel|owner)(@\w+)?$/i.test(text)) return false;
+    if (!/^\/(admin|panel|owner)(@\w+)?$/i.test(text) && text !== "👑 لوحة الأدمن") return false;
     if (message.chat.type !== "private") return true;
     const from = message.from;
     if (!from || !(await isAdmin(from.id))) {
