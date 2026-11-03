@@ -5,6 +5,7 @@ import { createAdminStore } from "../../../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../../../lib/admin/handlers";
 import { ADMIN_PERMISSIONS } from "../../../../../../lib/admin/core";
 import { createTelegramApi } from "../../../../../../lib/telegram-api";
+import { deriveManagedWebhookSecret } from "../../../../../../lib/managed-webhook-secret";
 import { createWebhookHandler } from "../../../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../../../lib/types";
 
@@ -62,7 +63,8 @@ export async function POST(
     botId: Number.isSafeInteger(botId) ? botId : rawBotId,
     hasSecretHeader: Boolean(request.headers.get("x-telegram-bot-api-secret-token")),
   });
-  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const masterWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const expectedSecret = masterWebhookSecret ? deriveManagedWebhookSecret(masterWebhookSecret, botId) : null;
   if (!expectedSecret || !safeSecretMatch(request.headers.get("x-telegram-bot-api-secret-token"), expectedSecret)) {
     console.error("managed_bot_webhook_auth_failed", { botId, expectedSecretConfigured: Boolean(expectedSecret) });
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
