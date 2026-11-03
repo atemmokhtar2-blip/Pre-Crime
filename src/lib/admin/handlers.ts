@@ -377,8 +377,8 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
         await deps.managedBots.resume(id);
         await recordOp(from.id, actorName, "managed_bot_admin_resumed", String(id), { sensitive: true });
-        await ack(update.id, "تمت إعادة تشغيل النسخة 🟢");
         const row = (await deps.managedBots.list()).find((b) => b.bot_id === id);
+        await ack(update.id, row?.status === "active" ? "تمت إعادة تشغيل النسخة 🟢" : "تم رفع الإيقاف الإداري، لكن النسخة ما زالت غير نشطة بسبب حالة الاشتراك أو التفعيل.");
         if (row) await showScreen(screenManagedBotDetail(row));
         return true;
       }
