@@ -152,9 +152,12 @@ export async function createTenantSql(sql: Sql, botId: number): Promise<Sql> {
   await sql(statement);
 
   const tables = "groups|group_members|group_settings|telegram_updates|moderation_actions|warnings|audit_events|pending_actions|telegram_message_events";
-  const pattern = new RegExp("\\b(FROM|JOIN|INTO|UPDATE|TABLE|ON)\\s+(" + tables + ")\\b", "gi");
+  const pattern = new RegExp("\\b(FROM|JOIN|INTO|UPDATE|ON)\\s+(" + tables + ")\\b", "gi");
+  const createPattern = new RegExp("\\bTABLE\\s+IF\\s+NOT\\s+EXISTS\\s+(" + tables + ")\\b", "gi");
   return ((strings: TemplateStringsArray, ...values: unknown[]) => {
-    const rewrite = (part: string) => part.replace(pattern, (_match, keyword: string, table: string) => keyword + ' "' + schema + '".' + table);
+    const rewrite = (part: string) => part
+      .replace(pattern, (_match, keyword: string, table: string) => keyword + ' "' + schema + '".' + table)
+      .replace(createPattern, (_match, table: string) => 'TABLE IF NOT EXISTS "' + schema + '".' + table);
     const cooked = Array.from(strings, rewrite) as unknown as TemplateStringsArray;
     Object.defineProperty(cooked, "raw", { value: Array.from(strings.raw, rewrite) });
     return sql(cooked, ...values);
