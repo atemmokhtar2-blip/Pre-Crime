@@ -780,30 +780,26 @@ export interface ManagedBotAdminRow {
   updated_at: string;
 }
 
-export function screenManagedBotList(bots: ManagedBotAdminRow[]): Screen {
-  const keyboard: InlineKeyboardButton[][] = bots.map((b) => [{
+export function screenManagedBotList(bots: ManagedBotAdminRow[], page = 0): Screen {
+  const p = paginate(bots, page);
+  const keyboard: InlineKeyboardButton[][] = p.items.map((b) => [{
     text: `${b.status === "active" && !b.admin_suspended ? "🟢" : b.status === "deleting" ? "🗑️" : "⏸️"} ${b.bot_username ? "@" + b.bot_username : b.bot_display_name || b.bot_id} · ${b.owner_username ? "@" + b.owner_username : b.owner_telegram_id}`,
     callback_data: ac("mb_view", b.bot_id),
   }]);
-  if (pageCount > 1) {
-    const nav: InlineKeyboardButton[] = [];
-    if (currentPage > 0) nav.push(btn("⬅️ السابق", "mb_page", currentPage - 1));
-    nav.push({ text: `${currentPage + 1}/${pageCount}`, callback_data: ac("noop") });
-    if (currentPage + 1 < pageCount) nav.push(btn("التالي ➡️", "mb_page", currentPage + 1));
-    keyboard.push(nav);
-  }
+  if (p.pages > 1) keyboard.push(pagerRow("mb_page", p.page, p.pages));
   keyboard.push([refresh("managed_bots"), back("home")]);
   return {
     text: [
       "🧩 إدارة النسخ",
       "━━━━━━━━━━━━━━━",
-      `إجمالي النسخ: ${bots.length}`,
+      `إجمالي النسخ: ${p.total}`,
+      `الصفحة: ${p.page + 1}/${p.pages}`,
       `النشطة: ${bots.filter((b) => b.status === "active" && !b.admin_suspended).length}`,
       `الموقوفة: ${bots.filter((b) => b.admin_suspended || b.status === "suspended_subscription").length}`,
       `قيد الحذف: ${bots.filter((b) => b.status === "deleting").length}`,
       "",
-      bots.length ? `الصفحة ${currentPage + 1} من ${pageCount} — اختر نسخة لإدارتها:` : "لا توجد نسخ مسجلة حاليًا.",
-    ].join("\n"),
+      p.total ? "اختر نسخة لعرض تفاصيلها وإدارتها:" : "لا توجد نسخ مسجلة حاليًا.",
+    ].join("\\n"),
     keyboard,
   };
 }
