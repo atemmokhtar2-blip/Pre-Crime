@@ -65,10 +65,10 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
     async deleteMessage(chatId, messageId) {
       return call<unknown>("deleteMessage", { chat_id: chatId, message_id: messageId });
     },
-    async getChat(chatId) {
+    async getChat(chatId: number | string) {
       return call<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>("getChat", { chat_id: chatId });
     },
-    async getChatMember(chatId, userId) {
+    async getChatMember(chatId: number | string, userId: number) {
       return call<ChatMemberInfo>("getChatMember", { chat_id: chatId, user_id: userId });
     },
     async getChatMemberCount(chatId) {
