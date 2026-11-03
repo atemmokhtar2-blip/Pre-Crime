@@ -1,7 +1,6 @@
 import { parseCallback, encodeCallback } from "./callbacks";
 import {
   screenHome,
-  screenCloneOptions,
   screenGuide,
   screenPanel,
   screenSettings,
@@ -705,24 +704,9 @@ export function createWebhookHandler(deps: WebhookDeps) {
       return;
     }
 
-    if (section === "create_clone") {
+    if (section === "create_clone" || section === "clone_token") {
       if (chat.type !== "private") {
         await ack(update.id, "إنشاء النسخة متاح من الخاص فقط.", true);
-        return;
-      }
-      await editScreen(chatId, messageId, screenCloneOptions());
-      await ack(update.id);
-      return;
-    }
-
-    if (section === "clone_beginner") {
-      await ack(update.id, "⛔ إنشاء النسخ للمبتدئين متوقف مؤقتًا.", true);
-      return;
-    }
-
-    if (section === "clone_token") {
-      if (chat.type !== "private") {
-        await ack(update.id, "إرسال التوكن متاح من الخاص فقط.", true);
         return;
       }
       await repo.setPending({ chat_id: chatId, group_id: 0, action: "clone_token", context: { ownerId: actorId } });
