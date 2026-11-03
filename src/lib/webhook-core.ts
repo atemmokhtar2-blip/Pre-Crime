@@ -710,7 +710,11 @@ export function createWebhookHandler(deps: WebhookDeps) {
       try {
         const membership = await bot.getChatMember(-1004463431688, actorId);
         if (!["member", "administrator", "creator"].includes(membership.status)) {
-          await bot.sendMessage(chatId, "🔒 إنشاء النسخة الخاصة متاح لمشتركي قناة Pre Crime فقط. اشترك في القناة ثم اضغط الزر مرة أخرى.");
+          const channel = await bot.getChat(-1004463431688).catch(() => null);
+          const joinUrl = channel?.username ? `https://t.me/${channel.username}` : channel?.invite_link;
+          await bot.sendMessage(chatId, "🔒 إنشاء النسخة الخاصة متاح لمشتركي قناة Pre Crime فقط. اشترك في القناة ثم اضغط الزر مرة أخرى.", joinUrl
+            ? { reply_markup: { inline_keyboard: [[{ text: "📢 اشترك في قناة Pre Crime", url: joinUrl }]] } }
+            : undefined);
           await ack(update.id, "يجب الاشتراك في القناة أولًا.", true);
           return;
         }
