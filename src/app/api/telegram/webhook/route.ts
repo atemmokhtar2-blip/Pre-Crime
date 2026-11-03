@@ -5,8 +5,6 @@ import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
-import { createAdminStore } from "../../../../lib/admin/store";
-import { createAdminPanel } from "../../../../lib/admin/handlers";
 import type { TelegramUpdate } from "../../../../lib/types";
 
 export const runtime = "nodejs";
