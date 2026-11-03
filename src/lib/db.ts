@@ -167,6 +167,14 @@ export async function createTenantSql(sql: Sql, botId: number): Promise<Sql> {
   return tenantSql;
 }
 
+export async function dropTenantSchema(sql: Sql, botId: number): Promise<void> {
+  if (!Number.isSafeInteger(botId) || botId <= 0) throw new Error("invalid_managed_bot_id");
+  const schema = "tenant_" + botId;
+  const statement = ['DROP SCHEMA IF EXISTS "' + schema + '" CASCADE'] as unknown as TemplateStringsArray;
+  Object.defineProperty(statement, "raw", { value: ['DROP SCHEMA IF EXISTS "' + schema + '" CASCADE'] });
+  await sql(statement);
+}
+
 export function createNeonRepo(sql: Sql): PreCrimeRepo {
   let schemaReady = false;
   async function ensure(): Promise<void> {
