@@ -1,6 +1,6 @@
 import { createCipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { createNeonRepo, type Sql } from "../../../../lib/db";
+import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
@@ -114,10 +114,36 @@ export async function POST(request: Request) {
             status = EXCLUDED.status,
             updated_at = NOW()
         `;
+        if (subscribed) {
+          const childBot = createTelegramApi(childToken);
+          const childIdentity = await childBot.getMe();
+          if (childIdentity.id !== managed.bot.id) throw new Error("managed_bot_identity_mismatch");
+
+          // Provision a private schema in the same Neon database, then attach
+          // the child token to its own Telegram webhook endpoint.
+          const tenantSql = await createTenantSql(sql, managed.bot.id);
+          const tenantRepo = createNeonRepo(tenantSql);
+          await tenantRepo.ensureSchema();
+
+          const appOrigin = process.env.APP_URL
+            ? new URL(process.env.APP_URL).origin
+            : process.env.VERCEL_URL
+              ? "https://" + process.env.VERCEL_URL
+              : new URL(request.url).origin;
+          const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
+          const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+          if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
+          await childBot.setWebhook(webhookUrl, webhookSecret);
+          await sql`
+            UPDATE managed_bots SET status = 'active', updated_at = NOW()
+            WHERE bot_id = ${managed.bot.id}
+          `;
+        }
+
         try {
           await bot.sendMessage(managed.user.id, subscribed
-            ? "✅ تم استلام بوتك الخاص بنجاح. جاري استكمال إعداد قاعدة البيانات المعزولة قبل تفعيله."
-            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ أعد الاشتراك ليتم استكمال التفعيل.");
+            ? "🎉 تم تشغيل نسختك الخاصة بنجاح! افتح البوت وابدأ بـ /start. بيانات مجموعاتك محفوظة في مساحة مستقلة داخل قاعدة Neon."
+            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ اشترك في القناة ثم تواصل مع الدعم لاستكمال التفعيل.");
         } catch { /* the owner may not have opened the manager bot */ }
       }
       const ownerIds = (process.env.BOT_OWNER_IDS ?? "")
