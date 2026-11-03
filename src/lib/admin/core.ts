@@ -111,6 +111,8 @@ export interface SystemConfig {
   notifyBotDown: boolean;
   notifyErrors: boolean;
   notificationTarget: number | null;
+  /** Additional public channels required by this tenant's cloned bot. */
+  subscriptionChannels: string[];
   protection: GlobalProtectionConfig;
 }
 
@@ -128,6 +130,7 @@ export function defaultSystemConfig(): SystemConfig {
     notifyBotDown: true,
     notifyErrors: true,
     notificationTarget: null,
+    subscriptionChannels: [],
     protection: {
       engines: {
         antiSpam: true,
