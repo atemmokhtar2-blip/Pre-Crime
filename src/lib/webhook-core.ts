@@ -440,7 +440,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (deleteNow) {
       try {
         await bot.deleteMessage(gid, message.message_id);
-        await repo.addAudit(gid, 0, "PRE CRIME", "message_deleted", name, { reason: "فلتر المحتوى" });
+        await repo.addAudit(gid, 0, "Pre Crime", "message_deleted", name, { reason: "فلتر المحتوى" });
       } catch {
         /* ignore */
       }
@@ -473,13 +473,13 @@ export function createWebhookHandler(deps: WebhookDeps) {
           });
         }
         const label = memberLabel(name, from.username || null, userId);
-        await repo.addAudit(gid, 0, "PRE CRIME", "violation", label, {
+        await repo.addAudit(gid, 0, "Pre Crime", "violation", label, {
           violations: enforcedViolations.map((v) => VIOLATION_LABELS[v]),
           ...(isAdmin ? { detected: "admin-word-filter" } : {}),
         });
-        if (!isAdmin) await applyPunishment(gid, userId, "PRE CRIME", label, enforcedViolations);
+        if (!isAdmin) await applyPunishment(gid, userId, "Pre Crime", label, enforcedViolations);
       } else if (isAdmin) {
-        await repo.addAudit(gid, 0, "PRE CRIME", "violation", name, { violations, detected: "admin-exempt" });
+        await repo.addAudit(gid, 0, "Pre Crime", "violation", name, { violations, detected: "admin-exempt" });
       }
     }
   }
@@ -603,7 +603,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       return;
     }
     // In a group, offer the readiness check.
-    await bot.sendMessage(chatId, "🛡️ PRE CRIME متصل بهذه المجموعة.\nاضغط «فحص الجاهزية» للتأكد من صلاحياتي، أو ارفعني مشرفًا أولًا.", {
+    await bot.sendMessage(chatId, "🛡️ Pre Crime متصل بهذه المجموعة.\nاضغط «فحص الجاهزية» للتأكد من صلاحياتي، أو ارفعني مشرفًا أولًا.", {
       reply_markup: { inline_keyboard: [[{ text: "🔎 فحص الجاهزية", callback_data: encodeCallback("check", chatId) }]] },
     });
   }
@@ -715,7 +715,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         return;
       }
       case "general": {
-        await editScreen(chatId, messageId, screenGeneral(settings, (await bot.getMe()).first_name ?? "PRE CRIME", gid));
+        await editScreen(chatId, messageId, screenGeneral(settings, (await bot.getMe()).first_name ?? "Pre Crime", gid));
         await ack(update.id);
         return;
       }
@@ -724,7 +724,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         settings.general.language = settings.general.language === "ar" ? "en" : "ar";
         await repo.setSettings(gid, settings);
         await repo.addAudit(gid, actorId, actorName, "settings_changed", "language", { value: settings.general.language });
-        await editScreen(chatId, messageId, screenGeneral(settings, (await bot.getMe()).first_name ?? "PRE CRIME", gid));
+        await editScreen(chatId, messageId, screenGeneral(settings, (await bot.getMe()).first_name ?? "Pre Crime", gid));
         await ack(update.id, "تم تغيير اللغة.");
         return;
       }
@@ -1133,10 +1133,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const report = ready
       ? "✅ البوت مشرف ولديه الصلاحيات الأساسية المطلوبة.\n\nيمكنك الآن فتح لوحة التحكم من الخاص وإدارة الحماية والأعضاء."
       : "⚠️ البوت غير جاهز بالكامل.\n" +
-        (!isAdmin ? "• ارفع PRE CRIME إلى مشرف.\n" : "") +
+        (!isAdmin ? "• ارفع Pre Crime إلى مشرف.\n" : "") +
         (missing.length ? `• فعّل الصلاحيات: ${missing.join("، ")}.\n` : "");
     const screen = {
-      text: `🛡️ تقرير جاهزية PRE CRIME\n\n${report}`,
+      text: `🛡️ تقرير جاهزية Pre Crime\n\n${report}`,
       keyboard: [
         [{ text: "🔄 إعادة الفحص", callback_data: encodeCallback("check", gid) }],
         [{ text: "📘 طريقة التفعيل", callback_data: encodeCallback("guide") }],
@@ -1191,7 +1191,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (added || promoted) {
       const adder = my.from;
       await ensureGroup(chat.id, chat.title, chat.type, adder?.id);
-      await repo.addAudit(chat.id, adder?.id ?? null, adder?.username ?? adder?.first_name ?? null, "member_joined", "PRE CRIME", { promoted });
+      await repo.addAudit(chat.id, adder?.id ?? null, adder?.username ?? adder?.first_name ?? null, "member_joined", "Pre Crime", { promoted });
 
       // Group notice: the only group-side action opens the private bot, never a group panel.
       const botUsername = (await bot.getMe()).username ?? "precrime_bot";
@@ -1201,7 +1201,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
       if (adder && !adder.is_bot) {
         await repo.upsertGroup({ chat_id: chat.id, title: chat.title ?? "مجموعة", username: null, chat_type: chat.type, status: "active", timezone: "UTC", added_at: new Date().toISOString(), owner_user_id: adder.id });
-        await sendSafe(adder.id, `✅ شكراً لك، تم تفعيل PRE CRIME في مجموعة «${chat.title ?? ""}».`, [
+        await sendSafe(adder.id, `✅ شكراً لك، تم تفعيل Pre Crime في مجموعة «${chat.title ?? ""}».`, [
           [{ text: "⚙️ فتح لوحة التحكم", url: `https://t.me/${botUsername}?start=panel_${chat.id}` }],
           [{ text: "📘 شرح التفعيل", callback_data: encodeCallback("guide") }],
         ]);
