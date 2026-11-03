@@ -78,7 +78,7 @@ export async function POST(
 
   try {
     const sql = neon(databaseUrl) as unknown as Sql;
-    const rows = await sql`SELECT encrypted_token, status FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+    const rows = await sql`SELECT encrypted_token, status, owner_telegram_id FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
     const record = rows[0];
     if (!record || record.status !== "active") {
       return Response.json({ ok: false, error: "managed_bot_not_active" }, { status: 403 });
@@ -108,7 +108,7 @@ export async function POST(
     if (claimed.length === 0) return Response.json({ ok: true, duplicate: true });
 
     try {
-      const handler = createWebhookHandler({ repo, bot });
+      const handler = createWebhookHandler({ repo, bot, supportOwnerId: Number(record.owner_telegram_id) });
       await handler.handleUpdate(update);
       await tenantSql`
         UPDATE telegram_updates
