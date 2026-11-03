@@ -799,7 +799,7 @@ export function screenManagedBotList(bots: ManagedBotAdminRow[], page = 0): Scre
       `قيد الحذف: ${bots.filter((b) => b.status === "deleting").length}`,
       "",
       p.total ? "اختر نسخة لعرض تفاصيلها وإدارتها:" : "لا توجد نسخ مسجلة حاليًا.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard,
   };
 }
