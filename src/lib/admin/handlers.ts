@@ -275,9 +275,13 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     const key = parsed.key;
     const args = parsed.args;
 
-    // Clone owners must never reach fleet/server controls, even with forged callbacks.
-    if (tenantMode && /^(sys|infra|emerg|em_)/.test(key)) {
-      await ack(update.id, "⛔ هذا الإعداد محجوب عن لوحات النسخ لحماية البوت الأساسي.", true);
+    // Tenant panels use a strict allowlist. Unknown/future callback keys are
+    // denied by default, including manually forged callbacks sent to Telegram.
+    const tenantAllowedCallback =
+      key === "home" || key === "noop" ||
+      /^(users|u_|groups|g_|admins|a_|licenses|l_|bcast|bc_|prot|pe_|analytics|an_|logs|log_)/.test(key);
+    if (tenantMode && !tenantAllowedCallback) {
+      await ack(update.id, "⛔ هذا الأمر غير متاح في النسخ الخاصة.", true);
       await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_control_blocked", key, {});
       return true;
     }
@@ -1444,10 +1448,16 @@ export function createAdminPanel(deps: AdminPanelDeps) {
   async function handlePending(chatId: number, text: string, from?: TelegramFrom): Promise<boolean> {
     const pending = await repo.getPending(chatId);
     if (!pending || !pending.action.startsWith("adm_")) return false;
-    if (tenantMode && /^(adm_sys_|adm_em_)/.test(pending.action)) {
+    const tenantAllowedPending = new Set([
+      "adm_search_user", "adm_pm", "adm_note", "adm_add_admin",
+      "adm_search_license", "adm_linkg", "adm_linku",
+      "adm_bc_ids", "adm_bc_text", "adm_bc_edit_keep",
+      "adm_g_msg", "adm_pe_words", "adm_pe_dom",
+    ]);
+    if (tenantMode && !tenantAllowedPending.has(pending.action)) {
       await repo.clearPending(chatId);
       if (from) await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_pending_blocked", pending.action, {});
-      await bot.sendMessage(chatId, "⛔ هذا الإجراء محجوب عن لوحات النسخ لحماية البوت الأساسي.");
+      await bot.sendMessage(chatId, "⛔ هذا الإجراء غير متاح في النسخ الخاصة.");
       return true;
     }
     if (!from || !(await isAdmin(from.id))) {
