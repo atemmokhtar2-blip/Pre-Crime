@@ -783,7 +783,7 @@ export interface ManagedBotAdminRow {
 export function screenManagedBotList(bots: ManagedBotAdminRow[], page = 0): Screen {
   const p = paginate(bots, page);
   const keyboard: InlineKeyboardButton[][] = p.items.map((b) => [{
-    text: `${b.status === "active" && !b.admin_suspended ? "🟢" : b.status === "deleting" ? "🗑️" : "⏸️"} ${b.bot_username ? "@" + b.bot_username : b.bot_display_name || b.bot_id} · ${b.owner_username ? "@" + b.owner_username : b.owner_telegram_id}`,
+    text: `${b.status === "active" && !b.admin_suspended ? "🟢" : b.status === "deleting" ? "🗑️" : "⏸️"} ${b.bot_username ? "@" + b.bot_username : esc(b.bot_display_name || b.bot_id)} · ${b.owner_username ? "@" + b.owner_username : b.owner_telegram_id}`,
     callback_data: ac("mb_view", b.bot_id),
   }]);
   if (p.pages > 1) keyboard.push(pagerRow("mb_page", p.page, p.pages));
