@@ -12,6 +12,7 @@ import type {
   TelegramUpdate,
 } from "../types";
 import type { AdminStore } from "./store";
+import type { ManagedBotAdminRow } from "../managed-bot-admin";
 import { restoreBackup, runBackup } from "./backup";
 import {
   ADMIN_PERMISSIONS,
@@ -70,6 +71,9 @@ import {
   screenWordList,
   type InfraData,
   screenInfo,
+  screenManagedBotList,
+  screenManagedBotDetail,
+  screenManagedBotDeleteConfirm,
 } from "./screens";
 
 export interface AdminPanelDeps {
@@ -81,6 +85,12 @@ export interface AdminPanelDeps {
   webhookSecret?: string;
   startedAt?: number;
   tenantMode?: boolean;
+  managedBots?: {
+    list(): Promise<ManagedBotAdminRow[]>;
+    suspend(botId: number): Promise<void>;
+    resume(botId: number): Promise<void>;
+    deletePermanently(botId: number): Promise<void>;
+  };
 }
 
 // Which panel permission gates each callback-key prefix. "emerg" is owner-only.
@@ -253,7 +263,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     await store.touchAdmin(from.id);
-    await show(message.chat.id, null, screenHome(tenantMode));
+    await show(message.chat.id, null, screenHome(tenantMode, isOwner(from.id)));
     return true;
   }
 
@@ -298,6 +308,11 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       await show(chatId, messageId, screenDenied());
       return true;
     }
+    if (key.startsWith("mb_") && !isOwner(from.id)) {
+      await ack(update.id, "⛔ إدارة النسخ متاحة للمالك الأساسي فقط.", true);
+      await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
+      return true;
+    }
     if (key === "emerg" || key.startsWith("em_")) {
       if (!isOwner(from.id)) {
         await ack(update.id, "⛔ أدوات الطوارئ للمالك فقط.", true);
@@ -324,8 +339,68 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     switch (key) {
       case "home":
         await ack(update.id);
-        await showScreen(screenHome(tenantMode));
+        await showScreen(screenHome(tenantMode, isOwner(from.id)));
         return true;
+
+      // ============ إدارة النسخ الخاصة (المالك الأساسي فقط) ============
+      case "mb_list":
+      case "mb_page": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة على هذا الخادم.", true); return true; }
+        const page = numArg(0) ?? 0;
+        await ack(update.id);
+        await showScreen(screenManagedBotList(await deps.managedBots.list(), page));
+        return true;
+      }
+      case "mb_view": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const id = numArg(0);
+        if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
+        await ack(update.id);
+        const botRow = (await deps.managedBots.list()).find((b) => b.bot_id === id);
+        await showScreen(botRow ? screenManagedBotDetail(botRow) : screenInfo("🤖 تفاصيل النسخة", "لم يتم العثور على النسخة.", "mb_list", 0));
+        return true;
+      }
+      case "mb_suspend": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const id = numArg(0);
+        if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
+        await deps.managedBots.suspend(id);
+        await recordOp(from.id, actorName, "managed_bot_admin_suspended", String(id), { sensitive: true });
+        await ack(update.id, "تم إيقاف النسخة ⏸️");
+        const row = (await deps.managedBots.list()).find((b) => b.bot_id === id);
+        if (row) await showScreen(screenManagedBotDetail(row));
+        return true;
+      }
+      case "mb_resume": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const id = numArg(0);
+        if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
+        await deps.managedBots.resume(id);
+        await recordOp(from.id, actorName, "managed_bot_admin_resumed", String(id), { sensitive: true });
+        const row = (await deps.managedBots.list()).find((b) => b.bot_id === id);
+        await ack(update.id, row?.status === "active" ? "تمت إعادة تشغيل النسخة 🟢" : "تم رفع الإيقاف الإداري، لكن النسخة ما زالت غير نشطة بسبب حالة الاشتراك أو التفعيل.");
+        if (row) await showScreen(screenManagedBotDetail(row));
+        return true;
+      }
+      case "mb_delete_ask": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const id = numArg(0);
+        if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
+        await ack(update.id);
+        const row = (await deps.managedBots.list()).find((b) => b.bot_id === id);
+        await showScreen(row ? screenManagedBotDeleteConfirm(row) : screenInfo("🤖 حذف النسخة", "النسخة غير موجودة.", "mb_list", 0));
+        return true;
+      }
+      case "mb_delete_confirm": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const id = numArg(0);
+        if (id == null || id <= 0) { await ack(update.id, "معرّف النسخة غير صالح.", true); return true; }
+        await deps.managedBots.deletePermanently(id);
+        await recordOp(from.id, actorName, "managed_bot_permanently_deleted", String(id), { sensitive: true, tenant_schema_dropped: true });
+        await ack(update.id, "تم حذف النسخة وبياناتها نهائيًا 🗑️");
+        await showScreen(screenManagedBotList(await deps.managedBots.list(), 0));
+        return true;
+      }
 
       // ============ المستخدمون ============
       case "users":
