@@ -10,7 +10,7 @@
     "build": "npm test && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node -e \"require('fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc --target ES2022 --module commonjs --moduleResolution node --noEmit false --outDir .test-build --skipLibCheck src/lib/managed-bot-limit.ts src/lib/http-security.ts src/lib/managed-webhook-secret.ts src/lib/onboarding.ts src/lib/protection.ts src/lib/types.ts src/lib/db.ts src/lib/admin/core.ts src/lib/admin/store.ts src/lib/admin/backup.ts && node --test tests/*.test.cjs"
+    "test": "node -e \"require('fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc --target ES2022 --module commonjs --moduleResolution node --noEmit false --outDir .test-build --skipLibCheck src/lib/managed-bot-limit.ts src/lib/http-security.ts src/lib/managed-webhook-secret.ts src/lib/managed-bot-admin.ts src/lib/onboarding.ts src/lib/protection.ts src/lib/types.ts src/lib/db.ts src/lib/admin/core.ts src/lib/admin/store.ts src/lib/admin/backup.ts && node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
