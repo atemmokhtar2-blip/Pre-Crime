@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "
 import { neon } from "@neondatabase/serverless";
 import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
+import { createManagedBotAdmin } from "../../../../lib/managed-bot-admin";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
@@ -39,11 +40,12 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
     )
   `;
   await ensureSingleManagedBotPerOwner(sql);
+  await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
 }
 
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
   await ensureManagedBotsSchema(sql);
-  const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
+  const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') AND admin_suspended = FALSE ORDER BY created_at ASC`;
   console.info("managed_bot_reconcile_started", { ownerId, pendingCount: pending.length });
   if (!pending.length) return;
   const membership = await managerBot.getChatMember("@K_J6k", ownerId).catch((error) => {
@@ -304,6 +306,10 @@ export async function POST(request: Request) {
         ownerIds,
         webhookUrl: process.env.APP_URL ? new URL("/api/telegram/webhook", process.env.APP_URL).toString() : undefined,
         webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+        managedBots: process.env.TELEGRAM_WEBHOOK_SECRET ? createManagedBotAdmin(sql, {
+          appOrigin: process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin,
+          webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+        }) : undefined,
       });
       const handler = createWebhookHandler({ repo, bot, admin });
 
