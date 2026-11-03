@@ -139,10 +139,30 @@ export async function ensureSchema(sql: Sql): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS audit_events_group_created_idx ON audit_events(chat_id, created_at DESC)`;
 }
 
-let schemaReady = false;
 let messageEventPruneCounter = 0;
 
+// Each managed bot uses its own PostgreSQL schema inside the shared Neon
+// database. Existing repository queries are kept intact, but every table
+// reference is qualified with the tenant schema.
+export async function createTenantSql(sql: Sql, botId: number): Promise<Sql> {
+  if (!Number.isSafeInteger(botId) || botId <= 0) throw new Error("invalid_managed_bot_id");
+  const schema = "tenant_" + botId;
+  const statement = ['CREATE SCHEMA IF NOT EXISTS "' + schema + '"'] as unknown as TemplateStringsArray;
+  Object.defineProperty(statement, "raw", { value: ['CREATE SCHEMA IF NOT EXISTS "' + schema + '"'] });
+  await sql(statement);
+
+  const tables = "groups|group_members|group_settings|telegram_updates|moderation_actions|warnings|audit_events|pending_actions|telegram_message_events";
+  const pattern = new RegExp("\\b(FROM|JOIN|INTO|UPDATE|TABLE|ON)\\s+(" + tables + ")\\b", "gi");
+  return ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    const rewrite = (part: string) => part.replace(pattern, (_match, keyword: string, table: string) => keyword + ' "' + schema + '".' + table);
+    const cooked = Array.from(strings, rewrite) as unknown as TemplateStringsArray;
+    Object.defineProperty(cooked, "raw", { value: Array.from(strings.raw, rewrite) });
+    return sql(cooked, ...values);
+  }) as Sql;
+}
+
 export function createNeonRepo(sql: Sql): PreCrimeRepo {
+  let schemaReady = false;
   async function ensure(): Promise<void> {
     if (schemaReady) return;
     await ensureSchema(sql);
