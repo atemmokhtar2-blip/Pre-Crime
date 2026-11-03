@@ -263,7 +263,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     await store.touchAdmin(from.id);
-    await show(message.chat.id, null, screenHome(tenantMode));
+    await show(message.chat.id, null, screenHome(tenantMode, isOwner(from.id)));
     return true;
   }
 
@@ -339,7 +339,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     switch (key) {
       case "home":
         await ack(update.id);
-        await showScreen(screenHome(tenantMode));
+        await showScreen(screenHome(tenantMode, isOwner(from.id)));
         return true;
 
       // ============ إدارة النسخ الخاصة (المالك الأساسي فقط) ============
