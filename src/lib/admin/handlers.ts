@@ -70,10 +70,23 @@ import {
   screenWordList,
   type InfraData,
   screenInfo,
+  screenManagedBotList,
+  screenManagedBotDetail,
+  screenManagedBotDeleteConfirm,
+  type ManagedBotAdminRow,
 } from "./screens";
+
+export interface ManagedBotAdminActions {
+  list(): Promise<ManagedBotAdminRow[]>;
+  get(botId: number): Promise<ManagedBotAdminRow | null>;
+  stop(botId: number): Promise<void>;
+  resume(botId: number): Promise<void>;
+  deletePermanently(botId: number): Promise<void>;
+}
 
 export interface AdminPanelDeps {
   store: AdminStore;
+  managedBots?: ManagedBotAdminActions;
   repo: PreCrimeRepo;
   bot: BotApi;
   ownerIds: number[];
@@ -298,7 +311,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       await show(chatId, messageId, screenDenied());
       return true;
     }
-    if (key === "emerg" || key.startsWith("em_")) {
+    if (key === "emerg" || key.startsWith("em_") || key.startsWith("mb_")) {
       if (!isOwner(from.id)) {
         await ack(update.id, "⛔ أدوات الطوارئ للمالك فقط.", true);
         await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
@@ -322,6 +335,57 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     };
 
     switch (key) {
+      case "mb_list":
+      case "mb_page": {
+        if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
+        const filter = key === "mb_list" ? args[0] ?? "all" : args[1] ?? "all";
+        const page = key === "mb_list" ? numArg(1) ?? 0 : numArg(0) ?? 0;
+        const all = await deps.managedBots.list();
+        const filtered = filter === "active" ? all.filter((b) => b.status === "active") : filter === "stopped" ? all.filter((b) => b.status === "failed") : all;
+        await ack(update.id);
+        await showScreen(screenManagedBotList(filtered, filter, page));
+        return true;
+      }
+      case "mb_view": {
+        const id = numArg(0);
+        if (!id || !deps.managedBots) { await ack(update.id, "النسخة غير متاحة.", true); return true; }
+        const b = await deps.managedBots.get(id);
+        await ack(update.id);
+        await showScreen(b ? screenManagedBotDetail(b) : screenInfo("🤖 إدارة النسخ", "لم يتم العثور على النسخة.", "mb_list"));
+        return true;
+      }
+      case "mb_stop":
+      case "mb_resume": {
+        const id = numArg(0);
+        if (!id || !deps.managedBots) { await ack(update.id, "النسخة غير متاحة.", true); return true; }
+        try {
+          if (key === "mb_stop") await deps.managedBots.stop(id); else await deps.managedBots.resume(id);
+          await recordOp(from.id, actorName, key === "mb_stop" ? "managed_bot_stopped" : "managed_bot_resumed", String(id), {});
+          await ack(update.id, key === "mb_stop" ? "تم إيقاف النسخة" : "تم تشغيل النسخة");
+          const b = await deps.managedBots.get(id);
+          await showScreen(b ? screenManagedBotDetail(b) : screenInfo("🤖 إدارة النسخ", "تعذر تحميل بيانات النسخة.", "mb_list"));
+        } catch (error) { await ack(update.id, error instanceof Error ? error.message.slice(0, 180) : "تعذر تنفيذ الإجراء.", true); }
+        return true;
+      }
+      case "mb_delete": {
+        const id = numArg(0);
+        if (!id || !deps.managedBots) { await ack(update.id, "النسخة غير متاحة.", true); return true; }
+        const b = await deps.managedBots.get(id);
+        await ack(update.id);
+        await showScreen(b ? screenManagedBotDeleteConfirm(b) : screenInfo("🤖 إدارة النسخ", "لم يتم العثور على النسخة.", "mb_list"));
+        return true;
+      }
+      case "mb_delete_confirm": {
+        const id = numArg(0);
+        if (!id || !deps.managedBots) { await ack(update.id, "النسخة غير متاحة.", true); return true; }
+        try {
+          await deps.managedBots.deletePermanently(id);
+          await recordOp(from.id, actorName, "managed_bot_deleted_permanently", String(id), { tenant_data_deleted: true });
+          await ack(update.id, "تم حذف النسخة وبياناتها نهائيًا");
+          await showScreen(screenManagedBotList(await deps.managedBots.list(), "all", 0));
+        } catch (error) { await ack(update.id, error instanceof Error ? error.message.slice(0, 180) : "فشل الحذف النهائي.", true); }
+        return true;
+      }
       case "home":
         await ack(update.id);
         await showScreen(screenHome(tenantMode));
