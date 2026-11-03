@@ -553,6 +553,27 @@ export function createAdminStore(sql: Sql) {
       return Number(rows[0]?.c ?? 0);
     },
 
+    // ---- managed bot registry (global owner panel) ----
+    async listManagedBots(): Promise<Array<{
+      bot_id: number; owner_telegram_id: number; owner_username: string | null;
+      bot_username: string | null; bot_display_name: string; status: string;
+      admin_suspended: boolean; created_at: string; updated_at: string;
+    }>> {
+      await ready();
+      const rows = await sql`SELECT bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, status, COALESCE(admin_suspended, false) AS admin_suspended, created_at, updated_at FROM managed_bots ORDER BY created_at DESC LIMIT 500`;
+      return rows.map((r) => ({
+        bot_id: Number(r.bot_id),
+        owner_telegram_id: Number(r.owner_telegram_id),
+        owner_username: r.owner_username == null ? null : String(r.owner_username),
+        bot_username: r.bot_username == null ? null : String(r.bot_username),
+        bot_display_name: String(r.bot_display_name ?? ""),
+        status: String(r.status ?? "failed"),
+        admin_suspended: r.admin_suspended === true,
+        created_at: toIso(r.created_at),
+        updated_at: toIso(r.updated_at),
+      }));
+    },
+
     // ---- backup / restore (system recovery) ----
     // Logical JSON dump of the operational tables. telegram_updates and
     // message_events are transport/ephemeral and intentionally excluded.
