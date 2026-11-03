@@ -617,7 +617,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         await sendRichScreen(chatId, screenPanel(group?.title ?? "المجموعة", gid));
         return;
       }
-      const home = screenHome(me.username ?? "precrime_bot");
+      const home = screenHome(me.username ?? "precrime_bot", !adminStartPanel);
       const keyboard: InlineKeyboardButton[][] = [...home.keyboard];
       if (message.from?.id) {
         const owned = await repo.listOwnedGroups(message.from.id);
@@ -695,7 +695,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
     // Non-group sections
     if (section === "home") {
-      const home = screenHome((await bot.getMe()).username ?? "precrime_bot");
+      const home = screenHome((await bot.getMe()).username ?? "precrime_bot", !adminStartPanel);
       await editScreen(chatId, messageId, home);
       await ack(update.id);
       return;
