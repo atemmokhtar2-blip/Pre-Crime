@@ -80,6 +80,7 @@ export interface AdminPanelDeps {
   webhookUrl?: string;
   webhookSecret?: string;
   startedAt?: number;
+  tenantMode?: boolean;
 }
 
 // Which panel permission gates each callback-key prefix. "emerg" is owner-only.
@@ -99,6 +100,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createAdminPanel(deps: AdminPanelDeps) {
   const { store, repo, bot, ownerIds } = deps;
+  const tenantMode = deps.tenantMode ?? false;
   const startedAt = deps.startedAt ?? Date.now();
 
   // ---------- auth ----------
@@ -251,7 +253,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     await store.touchAdmin(from.id);
-    await show(message.chat.id, null, await screenHome());
+    await show(message.chat.id, null, screenHome(tenantMode));
     return true;
   }
 
@@ -272,6 +274,13 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     const messageId = message.message_id;
     const key = parsed.key;
     const args = parsed.args;
+
+    // Clone owners must never reach fleet/server controls, even with forged callbacks.
+    if (tenantMode && /^(sys|infra|emerg|em_)/.test(key)) {
+      await ack(update.id, "⛔ هذا الإعداد محجوب عن لوحات النسخ لحماية البوت الأساسي.", true);
+      await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_control_blocked", key, {});
+      return true;
+    }
 
     if (key === "noop") {
       await ack(update.id);
@@ -311,7 +320,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     switch (key) {
       case "home":
         await ack(update.id);
-        await showScreen(screenHome());
+        await showScreen(screenHome(tenantMode));
         return true;
 
       // ============ المستخدمون ============
@@ -1435,6 +1444,12 @@ export function createAdminPanel(deps: AdminPanelDeps) {
   async function handlePending(chatId: number, text: string, from?: TelegramFrom): Promise<boolean> {
     const pending = await repo.getPending(chatId);
     if (!pending || !pending.action.startsWith("adm_")) return false;
+    if (tenantMode && /^(adm_sys_|adm_em_)/.test(pending.action)) {
+      await repo.clearPending(chatId);
+      if (from) await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_pending_blocked", pending.action, {});
+      await bot.sendMessage(chatId, "⛔ هذا الإجراء محجوب عن لوحات النسخ لحماية البوت الأساسي.");
+      return true;
+    }
     if (!from || !(await isAdmin(from.id))) {
       await repo.clearPending(chatId);
       return true;
@@ -1643,7 +1658,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
 
   // Receives a document upload (admin restore flow). Returns true when handled.
   async function handleDocument(chatId: number, userId: number, document: { file_id: string; file_name?: string; file_size?: number }): Promise<boolean> {
-    if (!isOwner(userId)) return false;
+    if (tenantMode || !isOwner(userId)) return false;
     const pending = await repo.getPending(chatId);
     if (!pending || pending.action !== "adm_em_restore") return false;
     const name = document.file_name ?? "backup.json";
