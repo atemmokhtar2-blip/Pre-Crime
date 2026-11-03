@@ -71,6 +71,17 @@ export function formatDateTime(iso: string | null | undefined): string {
 
 // ---------- Start ----------
 
+export function screenCloneOptions(): Screen {
+  return {
+    text: "🚀 إنشاء نسختك الخاصة\n━━━━━━━━━━━━━━━━━━\n\nاختر طريقة إنشاء النسخة المناسبة لك:",
+    keyboard: [
+      [{ text: "🧩 إنشاء نسخة للمبتدئين", callback_data: encodeCallback("clone_beginner"), style: "primary" }],
+      [{ text: "🔑 إرسال توكن البوت", callback_data: encodeCallback("clone_token"), style: "success" }],
+      [{ text: "↩️ رجوع", callback_data: encodeCallback("home") }],
+    ],
+  };
+}
+
 export function screenHome(botUsername: string): Screen {
   return {
     text:
