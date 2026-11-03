@@ -184,7 +184,7 @@ export async function POST(request: Request) {
             : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ اشترك في القناة ثم تواصل مع الدعم لاستكمال التفعيل.");
         } catch { /* the owner may not have opened the manager bot */ }
       }
-      if (update.message?.chat.type === 'private' && update.message.from && /^\\/start(?:@\\w+)?(?:\\s|$)/i.test((update.message.text ?? '').trim())) {
+      if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
         const appOrigin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : new URL(request.url).origin;
         await activatePendingManagedBots(sql, bot, update.message.from.id, appOrigin);
       }
