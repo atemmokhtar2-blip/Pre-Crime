@@ -4,6 +4,7 @@ import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
+import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../lib/types";
 
@@ -65,7 +66,7 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
       const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
       if (!secret) throw new Error('telegram_webhook_secret_missing');
       const webhookUrl = new URL('/api/telegram/managed/' + botId + '/webhook', origin).toString();
-      await childBot.setWebhook(webhookUrl, secret);
+      await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(secret, botId));
       const webhookInfo = await childBot.getWebhookInfo();
       console.info("managed_bot_activation_webhook_set", {
         botId, webhookUrlMatches: webhookInfo.url === webhookUrl,
@@ -226,7 +227,7 @@ export async function POST(request: Request) {
             const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
-            await childBot.setWebhook(webhookUrl, webhookSecret);
+            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, managed.bot.id));
             const webhookInfo = await childBot.getWebhookInfo();
             console.info("managed_bot_provisioning_webhook_set", {
               botId: managed.bot.id, webhookUrlMatches: webhookInfo.url === webhookUrl,
@@ -362,7 +363,7 @@ export async function POST(request: Request) {
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             const webhookUrl = new URL("/api/telegram/managed/" + identity.id + "/webhook", appOrigin).toString();
-            await childBot.setWebhook(webhookUrl, webhookSecret);
+            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, managed.bot.id));
             const info = await childBot.getWebhookInfo();
             if (info.url !== webhookUrl || info.last_error_message) throw new Error("child_webhook_verification_failed");
             await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id} AND owner_telegram_id = ${ownerId}`;
