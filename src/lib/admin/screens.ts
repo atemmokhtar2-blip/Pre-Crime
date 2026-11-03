@@ -780,7 +780,12 @@ export function screenManagedBotList(bots: ManagedBotScreenRow[], page: number):
 }
 
 export function screenManagedBotDetail(bot: ManagedBotScreenRow): Screen {
-  const status = bot.admin_suspended ? "⏸️ موقوفة إداريًا" : bot.status === "active" ? "🟢 نشطة" : bot.status === "deleting" ? "🗑️ جارٍ حذفها" : "🔴 " + bot.status;
+  const status = bot.admin_suspended ? "⏸️ موقوفة إداريًا" : bot.status === "active" ? "🟢 نشطة" : bot.status === "suspended_subscription" ? "⛔ موقوفة بسبب الاشتراك" : "🔴 " + bot.status;
+  const keyboard: InlineKeyboardButton[][] = [];
+  if (bot.admin_suspended) keyboard.push([btn("▶️ رفع الإيقاف الإداري", "mb_resume", bot.bot_id)]);
+  else if (bot.status === "active") keyboard.push([btn("⏸️ إيقاف النسخة", "mb_suspend", bot.bot_id)]);
+  keyboard.push([btn("🗑️ حذف النسخة نهائيًا", "mb_delete_ask", bot.bot_id)]);
+  keyboard.push([refresh("mb_view", bot.bot_id), back("mb_list", 0)]);
   return {
     text: [
       "🤖 تفاصيل النسخة",
@@ -798,15 +803,7 @@ export function screenManagedBotDetail(bot: ManagedBotScreenRow): Screen {
       "• إعادة التشغيل تعيد ضبط الـWebhook بعد التحقق من هوية البوت.",
       "• الحذف النهائي يمسح كل بيانات مساحة النسخة.",
     ].join("\n"),
-    keyboard: [
-      bot.admin_suspended
-        ? [btn("▶️ رفع الإيقاف الإداري", "mb_resume", bot.bot_id)]
-        : bot.status === "active"
-          ? [btn("⏸️ إيقاف النسخة", "mb_suspend", bot.bot_id)]
-          : [],
-      [btn("🗑️ حذف النسخة نهائيًا", "mb_delete_ask", bot.bot_id)],
-      [refresh("mb_view", bot.bot_id), back("mb_list", 0)],
-    ],
+    keyboard,
   };
 }
 
