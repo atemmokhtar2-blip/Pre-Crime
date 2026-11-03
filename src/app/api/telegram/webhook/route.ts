@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function decryptManagedBotToken(payload: string): string {
-  const keyHex = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? '';
+  const keyHex = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? '';
   if (!/^[a-f0-9]{64}$/i.test(keyHex)) throw new Error('managed_bot_encryption_key_missing_or_invalid');
   const packed = Buffer.from(payload, 'base64');
   if (packed.length < 29) throw new Error('managed_bot_token_payload_invalid');
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
       if (update.managed_bot) {
         // Clone provisioning is isolated: it must never interrupt primary bot traffic.
         try {
-          const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? "";
+          const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
           if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) {
             throw new Error("managed_bot_encryption_key_missing_or_invalid");
           }
