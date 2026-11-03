@@ -6,7 +6,7 @@ import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
 import { readJsonBody } from "../../../../lib/http-security";
-import { ensureSingleManagedBotPerOwner, findLiveManagedBot, isManagedBotLimitViolation } from "../../../../lib/managed-bot-limit";
+import { ensureSingleManagedBotPerOwner, findLiveManagedBot, findLiveManagedBotByBotId, isManagedBotLimitViolation } from "../../../../lib/managed-bot-limit";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../lib/types";
 
@@ -168,6 +168,10 @@ export async function POST(request: Request) {
           }
           const managed = update.managed_bot;
           await ensureManagedBotsSchema(sql);
+          const existingTokenBot = await findLiveManagedBotByBotId(sql, managed.bot.id);
+          if (existingTokenBot) {
+            throw new Error("managed_bot_token_already_in_use");
+          }
           const existingOwnerBot = await findLiveManagedBot(sql, managed.user.id);
           if (existingOwnerBot && existingOwnerBot.bot_id !== managed.bot.id) {
             await bot.sendMessage(managed.user.id, "⛔ مسموح لك بنسخة واحدة فقط. لديك نسخة مسجلة بالفعل؛ لا يمكن تفعيل نسخة ثانية.");
@@ -261,6 +265,8 @@ export async function POST(request: Request) {
         
         } catch (error) {
           if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(update.managed_bot.user.id, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
+          const tokenAlreadyInUse = error instanceof Error && error.message === "managed_bot_token_already_in_use";
+          if (tokenAlreadyInUse) { try { await bot.sendMessage(update.managed_bot.user.id, "⛔ فشل التفعيل: توكن هذا البوت مسجل بالفعل في نسخة موجودة أو قيد التفعيل. لم يتم إنشاء نسخة جديدة."); } catch {} }
           console.error("managed_bot_provisioning_failed", {
             updateId: update.update_id,
             stage: "managed_bot_provisioning",
@@ -268,9 +274,11 @@ export async function POST(request: Request) {
             ownerId: update.managed_bot.user.id,
             error: error instanceof Error ? error.message : String(error),
           });
-          try {
-            await bot.sendMessage(update.managed_bot.user.id, "⚠️ تعذر تجهيز النسخة الآن، لكن البوت الأساسي ما زال يعمل. حاول مرة أخرى لاحقًا أو تواصل مع الدعم.");
-          } catch { /* owner may not have opened the primary bot */ }
+          if (!tokenAlreadyInUse) {
+            try {
+              await bot.sendMessage(update.managed_bot.user.id, "⚠️ تعذر تجهيز النسخة الآن، لكن البوت الأساسي ما زال يعمل. حاول مرة أخرى لاحقًا أو تواصل مع الدعم.");
+            } catch { /* owner may not have opened the primary bot */ }
+          }
         }
       }
       if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
@@ -333,6 +341,12 @@ export async function POST(request: Request) {
             const identity = await childBot.getMe();
             if (!identity.username) throw new Error("bot_username_unavailable");
             await ensureManagedBotsSchema(sql);
+            const existingTokenBot = await findLiveManagedBotByBotId(sql, identity.id);
+            if (existingTokenBot) {
+              await repo.clearPending(ownerId);
+              await bot.sendMessage(ownerId, "⛔ فشل التفعيل: توكن هذا البوت مستخدم بالفعل في نسخة مسجلة أو قيد التفعيل. استخدم توكن بوت جديدًا غير مرتبط بأي نسخة.");
+              return Response.json({ ok: true, processed: true, error: "bot_token_already_in_use" });
+            }
             const existingOwnerBot = await findLiveManagedBot(sql, ownerId);
             if (existingOwnerBot && existingOwnerBot.bot_id !== identity.id) {
               await repo.clearPending(ownerId);
@@ -391,11 +405,14 @@ export async function POST(request: Request) {
             await bot.sendMessage(ownerId, "🎉 تم تفعيل نسختك @" + identity.username + " بنجاح! افتح البوت وأرسل /start.");
           } catch (error) {
             if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(ownerId, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
+            const tokenAlreadyInUse = error instanceof Error && error.message === "bot_already_registered_to_another_owner";
             console.error("manual_clone_token_provisioning_failed", {
               ownerId, error: error instanceof Error ? error.message : "unknown_error",
             });
             await repo.clearPending(ownerId);
-            await bot.sendMessage(ownerId, "⚠️ لم نتمكن من تفعيل النسخة. تأكد أن التوكن صحيح وأن البوت غير مربوط بحساب آخر، ثم ابدأ من جديد. لم يتم تسجيل التوكن كنص مكشوف.");
+            await bot.sendMessage(ownerId, tokenAlreadyInUse
+              ? "⛔ فشل التفعيل: هذا التوكن مرتبط بالفعل بنسخة أخرى أو بحساب آخر. لم يتم تشغيل نسخة مكررة. استخدم توكن بوت جديدًا."
+              : "⚠️ فشل تفعيل النسخة: تأكد من صحة التوكن وأن البوت غير مربوط بحساب آخر، ثم أعد المحاولة. لم يتم تسجيل التوكن كنص مكشوف.");
           }
           await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
           return Response.json({ ok: true, processed: true });
