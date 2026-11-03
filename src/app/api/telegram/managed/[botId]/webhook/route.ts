@@ -118,7 +118,7 @@ export async function POST(
     // One-time, self-service migration for bots that still have the legacy
     // shared webhook secret. Do not process the triggering payload: ask
     // Telegram to retry it after the per-bot secret has taken effect.
-    if (isLegacySecret && !isCurrentSecret) {
+    if (isLegacySecret && !isCurrentSecret && masterWebhookSecret) {
       const rotatedSecret = deriveManagedWebhookSecret(masterWebhookSecret, botId);
       const webhookUrl = new URL("/api/telegram/managed/" + botId + "/webhook", request.url).toString();
       await bot.setWebhook(webhookUrl, rotatedSecret);
