@@ -200,7 +200,8 @@ export async function POST(
         update.callback_query?.message?.chat.type === "private" ? update.callback_query.message.chat.id :
         null;
 
-      if (actor && privateChatId != null) {
+      // Always let the tenant owner reach /admin to repair channel settings.
+      if (actor && privateChatId != null && actor.id !== ownerId) {
         stage = "subscription_gate";
         const managerToken = process.env.TELEGRAM_BOT_TOKEN;
         if (!managerToken) throw new Error("primary_bot_token_missing_for_subscription_check");
@@ -211,8 +212,13 @@ export async function POST(
         const primaryMembership = await managerBot.getChatMember("@K_J6k", actor.id);
         if (!["member", "administrator", "creator"].includes(primaryMembership.status)) missingChannels.push("@K_J6k");
         for (const channel of extraChannels) {
-          const membership = await bot.getChatMember(channel, actor.id);
-          if (!["member", "administrator", "creator"].includes(membership.status)) missingChannels.push(channel);
+          try {
+            const membership = await bot.getChatMember(channel, actor.id);
+            if (!["member", "administrator", "creator"].includes(membership.status)) missingChannels.push(channel);
+          } catch {
+            // Treat inaccessible channels as missing; the owner can still repair the configuration.
+            missingChannels.push(channel);
+          }
         }
         const subscribed = missingChannels.length === 0;
 
