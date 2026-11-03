@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import { createTenantSql, createNeonRepo, type Sql } from "../../../../../../lib/db";
 import { createAdminStore } from "../../../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../../../lib/admin/handlers";
+import { ADMIN_PERMISSIONS } from "../../../../../../lib/admin/core";
 import { createTelegramApi } from "../../../../../../lib/telegram-api";
 import { createWebhookHandler } from "../../../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../../../lib/types";
@@ -123,6 +124,20 @@ export async function POST(
     // The owner is an admin only inside this bot's tenant schema.
     const adminStore = createAdminStore(tenantSql);
     await adminStore.ensureReady();
+    await tenantSql`
+      INSERT INTO bot_admins (telegram_user_id, display_name, status, permissions, added_by)
+      VALUES (
+        ${ownerId},
+        ${record.owner_username ? "@" + String(record.owner_username) : "مالك النسخة"},
+        'active',
+        ${JSON.stringify(ADMIN_PERMISSIONS)}::jsonb,
+        ${ownerId}
+      )
+      ON CONFLICT (telegram_user_id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        status = 'active',
+        permissions = EXCLUDED.permissions
+    `;
     const appOrigin = new URL(request.url).origin;
     const admin = createAdminPanel({
       store: adminStore,
