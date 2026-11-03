@@ -20,6 +20,23 @@ function decryptManagedBotToken(payload: string): string {
   return Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]).toString('utf8');
 }
 
+async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
+  await sql`
+    CREATE TABLE IF NOT EXISTS managed_bots (
+      bot_id BIGINT PRIMARY KEY,
+      owner_telegram_id BIGINT NOT NULL,
+      owner_username TEXT,
+      bot_username TEXT,
+      bot_display_name TEXT NOT NULL DEFAULT '',
+      encrypted_token TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending_isolation'
+        CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+}
+
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
   const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
   if (!pending.length) return;
@@ -90,6 +107,10 @@ export async function POST(request: Request) {
     const repo = createNeonRepo(sql);
 
     await repo.ensureSchema();
+    // Bootstrap the central managed-bot registry on every webhook, not only
+    // when Telegram first emits a managed_bot update. Otherwise /start and
+    // ordinary messages fail on fresh production databases.
+    await ensureManagedBotsSchema(sql);
 
     // Idempotent update claim. Failed deliveries may be retried; successful ones
     // return early without duplicating side effects.
