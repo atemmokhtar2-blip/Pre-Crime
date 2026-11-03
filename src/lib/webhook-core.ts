@@ -1185,7 +1185,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
       if (permissionsRevoked) {
         const botUsername = (await bot.getMe()).username ?? "precrime_bot";
         await sendSafe(chat.id,
-          "⚠️ **تنبيه — الحماية متوقفة**\n\nتم تعطيل صلاحيات Pre Crime في هذه المجموعة.\n\n🔒 لن تعمل أدوات الحماية حتى يتم منح البوت صلاحيات المشرف مرة أخرى.",
+          "تم تعطيل صلاحيات Pre Crime في هذه المجموعة.",
           [[{ text: "➕ إعادة تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=activate` }]],
         );
       }
