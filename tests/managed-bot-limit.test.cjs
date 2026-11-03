@@ -19,18 +19,20 @@ function fakeSql(rows = []) {
 test("single-bot enforcement disables legacy duplicate live rows before creating a unique partial index", async () => {
   const { sql, calls } = fakeSql();
   await ensureSingleManagedBotPerOwner(sql);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(calls[0].text, /ROW_NUMBER\(\) OVER/);
   assert.match(calls[0].text, /SET status = 'failed'/);
-  assert.match(calls[1].text, /CREATE UNIQUE INDEX IF NOT EXISTS managed_bots_one_live_bot_per_owner/);
-  assert.match(calls[1].text, /WHERE status IN/);
+  assert.match(calls[1].text, /pg_indexes/);
+  assert.match(calls[2].text, /CREATE UNIQUE INDEX IF NOT EXISTS managed_bots_one_live_bot_per_owner/);
+  assert.match(calls[2].text, /paused/);
+  assert.match(calls[2].text, /WHERE status IN/);
 });
 
 test("owner lookup is scoped to live statuses and validates the Telegram owner ID", async () => {
   const { sql, calls } = fakeSql([{ bot_id: "123", status: "active" }]);
   assert.deepEqual(await findLiveManagedBot(sql, 77), { bot_id: 123, status: "active" });
   assert.match(calls[0].text, /owner_telegram_id = \?/);
-  assert.match(calls[0].text, /pending_isolation.*active.*suspended_subscription/);
+  assert.match(calls[0].text, /pending_isolation.*active.*suspended_subscription.*paused/);
   await assert.rejects(() => findLiveManagedBot(sql, -1), /invalid_managed_bot_owner_id/);
 });
 
@@ -48,6 +50,6 @@ test("bot identity lookup rejects an already live Telegram bot token identity", 
     status: "active",
   });
   assert.match(calls[0].text, /WHERE bot_id = \?/);
-  assert.match(calls[0].text, /pending_isolation.*active.*suspended_subscription/);
+  assert.match(calls[0].text, /pending_isolation.*active.*suspended_subscription.*paused/);
   await assert.rejects(() => findLiveManagedBotByBotId(sql, 0), /invalid_managed_bot_id/);
 });

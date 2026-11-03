@@ -2,8 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "
 import { neon } from "@neondatabase/serverless";
 import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
-import { createManagedBotAdmin } from "../../../../lib/managed-bot-admin";
-import { createAdminPanel } from "../../../../lib/admin/handlers";
+import { createAdminPanel, type ManagedBotAdminActions } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
 import { readJsonBody } from "../../../../lib/http-security";
@@ -34,18 +33,27 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
       bot_display_name TEXT NOT NULL DEFAULT '',
       encrypted_token TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending_isolation'
-        CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+        CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  await ensureSingleManagedBotPerOwner(sql);
+  const statusConstraint = await sql`SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'managed_bots'::regclass AND conname = 'managed_bots_status_check' LIMIT 1`;
+  if (statusConstraint.length && !String(statusConstraint[0].definition ?? "").includes("paused")) {
+    await sql`ALTER TABLE managed_bots DROP CONSTRAINT managed_bots_status_check`;
+  }
+  if (!statusConstraint.length || !String(statusConstraint[0].definition ?? "").includes("paused")) {
+    await sql`ALTER TABLE managed_bots ADD CONSTRAINT managed_bots_status_check CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused'))`;
+  }
   await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Migrate instances paused by the previous admin_suspended implementation.
+  await sql`UPDATE managed_bots SET status = 'paused', updated_at = NOW() WHERE admin_suspended = TRUE AND status = 'active'`;
+  await ensureSingleManagedBotPerOwner(sql);
 }
 
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
   await ensureManagedBotsSchema(sql);
-  const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') AND admin_suspended = FALSE ORDER BY created_at ASC`;
+  const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
   console.info("managed_bot_reconcile_started", { ownerId, pendingCount: pending.length });
   if (!pending.length) return;
   const membership = await managerBot.getChatMember("@K_J6k", ownerId).catch((error) => {
@@ -202,7 +210,7 @@ export async function POST(request: Request) {
               bot_display_name TEXT NOT NULL DEFAULT '',
               encrypted_token TEXT NOT NULL,
               status TEXT NOT NULL DEFAULT 'pending_isolation'
-                CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+                CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
               created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
@@ -299,17 +307,62 @@ export async function POST(request: Request) {
         .split(",")
         .map((value) => Number(value.trim()))
         .filter((value) => Number.isSafeInteger(value) && value > 0);
+      const managedBotActions: ManagedBotAdminActions = {
+        async list() {
+          await ensureManagedBotsSchema(sql);
+          const rows = await sql`SELECT bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, status, created_at, updated_at FROM managed_bots ORDER BY created_at DESC LIMIT 500`;
+          return rows.map((r) => ({ bot_id: Number(r.bot_id), owner_telegram_id: Number(r.owner_telegram_id), owner_username: r.owner_username == null ? null : String(r.owner_username), bot_username: r.bot_username == null ? null : String(r.bot_username), bot_display_name: String(r.bot_display_name ?? ""), status: String(r.status), created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at ?? ""), updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at ?? "") }));
+        },
+        async get(botId) {
+          await ensureManagedBotsSchema(sql);
+          const rows = await sql`SELECT bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, status, created_at, updated_at FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+          const r = rows[0];
+          return r ? { bot_id: Number(r.bot_id), owner_telegram_id: Number(r.owner_telegram_id), owner_username: r.owner_username == null ? null : String(r.owner_username), bot_username: r.bot_username == null ? null : String(r.bot_username), bot_display_name: String(r.bot_display_name ?? ""), status: String(r.status), created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at ?? ""), updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at ?? "") } : null;
+        },
+        async stop(botId) {
+          const rows = await sql`SELECT encrypted_token FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+          if (!rows[0]) throw new Error("النسخة غير موجودة.");
+          await sql`UPDATE managed_bots SET status = 'paused', admin_suspended = TRUE, updated_at = NOW() WHERE bot_id = ${botId}`;
+          const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
+          await child.deleteWebhook(false);
+        },
+        async resume(botId) {
+          const rows = await sql`SELECT encrypted_token, status FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+          if (!rows[0]) throw new Error("النسخة غير موجودة.");
+          if (String(rows[0].status) !== "paused") throw new Error("لا يمكن إعادة تشغيل النسخة من حالتها الحالية.");
+          const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
+          const identity = await child.getMe();
+          if (identity.id !== botId) throw new Error("فشل التحقق من هوية البوت.");
+          const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+          if (!secret) throw new Error("إعداد Webhook غير متاح.");
+          const origin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin;
+          const webhookUrl = new URL("/api/telegram/managed/" + botId + "/webhook", origin).toString();
+          await child.setWebhook(webhookUrl, deriveManagedWebhookSecret(secret, botId));
+          const info = await child.getWebhookInfo();
+          if (info.url !== webhookUrl || info.last_error_message) throw new Error("فشل التحقق من Webhook بعد إعادة التشغيل.");
+          await sql`UPDATE managed_bots SET status = 'active', admin_suspended = FALSE, updated_at = NOW() WHERE bot_id = ${botId}`;
+        },
+        async deletePermanently(botId) {
+          const rows = await sql`SELECT encrypted_token FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+          if (!rows[0]) throw new Error("النسخة غير موجودة.");
+          await sql`UPDATE managed_bots SET status = 'deleting', admin_suspended = TRUE, updated_at = NOW() WHERE bot_id = ${botId}`;
+          const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
+          await child.deleteWebhook(true);
+          const schema = "tenant_" + botId;
+          const ddl = [`DROP SCHEMA IF EXISTS "${schema}" CASCADE`] as unknown as TemplateStringsArray;
+          Object.defineProperty(ddl, "raw", { value: [`DROP SCHEMA IF EXISTS "${schema}" CASCADE`] });
+          await sql(ddl);
+          await sql`DELETE FROM managed_bots WHERE bot_id = ${botId}`;
+        },
+      };
       const admin = createAdminPanel({
         store: createAdminStore(sql),
         repo,
         bot,
+        managedBots: managedBotActions,
         ownerIds,
         webhookUrl: process.env.APP_URL ? new URL("/api/telegram/webhook", process.env.APP_URL).toString() : undefined,
         webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
-        managedBots: process.env.TELEGRAM_WEBHOOK_SECRET ? createManagedBotAdmin(sql, {
-          appOrigin: process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin,
-          webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
-        }) : undefined,
       });
       const handler = createWebhookHandler({ repo, bot, admin });
 
@@ -373,7 +426,7 @@ export async function POST(request: Request) {
                 bot_display_name TEXT NOT NULL DEFAULT '',
                 encrypted_token TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending_isolation'
-                  CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+                  CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused')),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
               )
