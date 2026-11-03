@@ -6,6 +6,7 @@ import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
 import { readJsonBody } from "../../../../lib/http-security";
+import { ensureSingleManagedBotPerOwner, findLiveManagedBot, isManagedBotLimitViolation } from "../../../../lib/managed-bot-limit";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../lib/types";
 
@@ -37,6 +38,7 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await ensureSingleManagedBotPerOwner(sql);
 }
 
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
@@ -165,6 +167,12 @@ export async function POST(request: Request) {
             throw new Error("managed_bot_encryption_key_missing_or_invalid");
           }
           const managed = update.managed_bot;
+          await ensureManagedBotsSchema(sql);
+          const existingOwnerBot = await findLiveManagedBot(sql, managed.user.id);
+          if (existingOwnerBot && existingOwnerBot.bot_id !== managed.bot.id) {
+            await bot.sendMessage(managed.user.id, "⛔ مسموح لك بنسخة واحدة فقط. لديك نسخة مسجلة بالفعل؛ لا يمكن تفعيل نسخة ثانية.");
+            throw new Error("owner_already_has_managed_bot");
+          }
           console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_started", botId: managed.bot.id, ownerId: managed.user.id });
           const childToken = await bot.getManagedBotToken(managed.bot.id);
           console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_completed", botId: managed.bot.id, tokenReceived: Boolean(childToken), tokenLength: childToken.length });
@@ -240,7 +248,7 @@ export async function POST(request: Request) {
             });
             await sql`
               UPDATE managed_bots SET status = 'active', updated_at = NOW()
-              WHERE bot_id = ${managed.bot.id}
+              WHERE bot_id = ${managed.bot.id} AND owner_telegram_id = ${managed.user.id}
             `;
             console.info("managed_bot_provisioning_completed", { botId: managed.bot.id, ownerId: managed.user.id });
           }
@@ -252,6 +260,7 @@ export async function POST(request: Request) {
           } catch { /* the owner may not have opened the manager bot */ }
         
         } catch (error) {
+          if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(update.managed_bot.user.id, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
           console.error("managed_bot_provisioning_failed", {
             updateId: update.update_id,
             stage: "managed_bot_provisioning",
@@ -323,6 +332,13 @@ export async function POST(request: Request) {
             const childBot = createTelegramApi(rawToken);
             const identity = await childBot.getMe();
             if (!identity.username) throw new Error("bot_username_unavailable");
+            await ensureManagedBotsSchema(sql);
+            const existingOwnerBot = await findLiveManagedBot(sql, ownerId);
+            if (existingOwnerBot && existingOwnerBot.bot_id !== identity.id) {
+              await repo.clearPending(ownerId);
+              await bot.sendMessage(ownerId, "⛔ مسموح لك بنسخة واحدة فقط. لديك نسخة مسجلة بالفعل؛ لا يمكن تفعيل نسخة ثانية.");
+              return Response.json({ ok: true, processed: true, error: "one_managed_bot_limit" });
+            }
             const iv = randomBytes(12);
             const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
             const encrypted = Buffer.concat([cipher.update(rawToken, "utf8"), cipher.final()]);
@@ -341,6 +357,7 @@ export async function POST(request: Request) {
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
               )
             `;
+            await ensureSingleManagedBotPerOwner(sql);
             const saved = await sql`
               INSERT INTO managed_bots
                 (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
@@ -373,6 +390,7 @@ export async function POST(request: Request) {
             await repo.clearPending(ownerId);
             await bot.sendMessage(ownerId, "🎉 تم تفعيل نسختك @" + identity.username + " بنجاح! افتح البوت وأرسل /start.");
           } catch (error) {
+            if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(ownerId, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
             console.error("manual_clone_token_provisioning_failed", {
               ownerId, error: error instanceof Error ? error.message : "unknown_error",
             });
