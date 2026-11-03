@@ -71,7 +71,7 @@ export function formatDateTime(iso: string | null | undefined): string {
 
 // ---------- Start ----------
 
-export function screenHome(botUsername: string): Screen {
+export function screenHome(botUsername: string, allowClone = true): Screen {
   return {
     text:
       `${BRAND}\n` +
@@ -86,7 +86,7 @@ export function screenHome(botUsername: string): Screen {
       FOOTER,
     keyboard: [
       [{ text: "➕ إضافة البوت إلى مجموعتي", url: `https://t.me/${botUsername}?startgroup=true` }],
-      [{ text: "🚀 أنشئ نسختك الخاصة", callback_data: encodeCallback("create_clone"), style: "success" }],
+      ...(allowClone ? [[{ text: "🚀 أنشئ نسختك الخاصة", callback_data: encodeCallback("create_clone"), style: "success" as const }]] : []),
       [{ text: "📘 شرح طريقة الاستخدام", callback_data: encodeCallback("guide") }],
     ],
   };
