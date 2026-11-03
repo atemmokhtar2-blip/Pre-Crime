@@ -308,7 +308,12 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     if (key === "managed_bots" || key.startsWith("mb_")) {
-      if (!isOwner(from.id)) {\n        await ack(update.id, "⛔ إدارة النسخ للمالك الأساسي فقط.", true);\n        await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});\n        return true;\n      }\n    } else if (key === "emerg" || key.startsWith("em_")) {
+      if (!isOwner(from.id)) {
+        await ack(update.id, "⛔ إدارة النسخ للمالك الأساسي فقط.", true);
+        await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
+        return true;
+      }
+    } else if (key === "emerg" || key.startsWith("em_")) {
       if (!isOwner(from.id)) {
         await ack(update.id, "⛔ أدوات الطوارئ للمالك فقط.", true);
         await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
