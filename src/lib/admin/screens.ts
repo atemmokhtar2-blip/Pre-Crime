@@ -40,6 +40,7 @@ export function screenHome(tenantMode = false, ownerMode = true): Screen {
     [btn("📣 الإذاعة", "bcast"), btn("🛡️ الحماية العامة", "prot")],
     [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
   ];
+  if (tenantMode && ownerMode) keyboard.push([btn("📢 الاشتراك الإجباري", "sub_channels")]);
   if (!tenantMode) {
     if (ownerMode) keyboard.push([btn("🤖 إدارة النسخ", "mb_list", "all", 0)]);
     keyboard.push(
@@ -49,6 +50,26 @@ export function screenHome(tenantMode = false, ownerMode = true): Screen {
   }
   return {
     text: tenantMode ? "👑 لوحة إدارة نسختك الخاصة" : "👑 PRE CRIME  /  ADMIN",
+    keyboard,
+  };
+}
+
+// ============ إدارة الاشتراك الإجباري للنسخة ============
+
+export function screenSubscriptionChannels(channels: string[]): Screen {
+  const keyboard: InlineKeyboardButton[][] = channels.map((channel, index) => [btn(`🗑️ حذف ${channel}`, "sub_remove", index)]);
+  keyboard.push([btn("➕ إضافة قناة", "sub_add")], [refresh("sub_channels"), back("home")]);
+  return {
+    text: [
+      "📢 الاشتراك الإجباري للنسخة",
+      "━━━━━━━━━━━━━━━",
+      "القناة الأساسية للنظام: @K_J6k",
+      "",
+      "قنوات إضافية يجب على المستخدم الاشتراك فيها:",
+      ...(channels.length ? channels.map((channel, i) => `${i + 1}. ${esc(channel)}`) : ["لا توجد قنوات إضافية."]),
+      "",
+      "ملاحظة: أضف البوت المستنسخ مشرفًا في كل قناة حتى يستطيع التحقق من اشتراك الأعضاء.",
+    ].join("\n"),
     keyboard,
   };
 }
