@@ -716,14 +716,21 @@ export function createWebhookHandler(deps: WebhookDeps) {
     }
 
     if (section === "clone_beginner") {
-      await bot.sendMessage(chatId, "⛔ إنشاء النسخ للمبتدئين متوقف مؤقتًا. استخدم خيار إرسال توكن البوت.");
-      await ack(update.id, "متوقف مؤقتًا.", true);
+      await ack(update.id, "⛔ إنشاء النسخ للمبتدئين متوقف مؤقتًا.", true);
       return;
     }
 
     if (section === "clone_token") {
-      await bot.sendMessage(chatId, "🔑 خيار إرسال توكن البوت قيد التجهيز حاليًا، ولم يتم تفعيل استقبال التوكنات بعد. لا ترسل أي توكن في هذه المرحلة.");
-      await ack(update.id, "استقبال التوكنات قيد التجهيز.", true);
+      if (chat.type !== "private") {
+        await ack(update.id, "إرسال التوكن متاح من الخاص فقط.", true);
+        return;
+      }
+      await repo.setPending({ chat_id: chatId, group_id: 0, action: "clone_token", context: { ownerId: actorId } });
+      await bot.sendMessage(chatId,
+        "🔑 أرسل توكن البوت الذي أنشأته من BotFather في رسالة واحدة.\n\nسيتم التحقق منه ثم حذف رسالتك تلقائيًا. لا ترسل أي بيانات أخرى.",
+        { reply_markup: { force_reply: true, input_field_placeholder: "123456789:ABC..." } }
+      );
+      await ack(update.id, "أرسل توكن البوت في رسالة منفصلة.");
       return;
     }
 
