@@ -5,6 +5,7 @@ import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
+import { readJsonBody } from "../../../../lib/http-security";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../lib/types";
 
@@ -95,12 +96,14 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let update: TelegramUpdate;
-  try {
-    update = (await request.json()) as TelegramUpdate;
-  } catch {
-    return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  const parsedBody = await readJsonBody<TelegramUpdate>(request, 1024 * 1024);
+  if (!parsedBody.ok) {
+    return Response.json(
+      { ok: false, error: parsedBody.status === 413 ? "payload_too_large" : "invalid_json" },
+      { status: parsedBody.status },
+    );
   }
+  const update = parsedBody.value;
 
   if (!Number.isSafeInteger(update.update_id) || update.update_id < 0) {
     return Response.json({ ok: false, error: "invalid_update_id" }, { status: 400 });
