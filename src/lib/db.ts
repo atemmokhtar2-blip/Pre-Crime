@@ -134,6 +134,7 @@ export async function ensureSchema(sql: Sql): Promise<void> {
   `;
   await sql`CREATE INDEX IF NOT EXISTS telegram_message_events_user_created_idx ON telegram_message_events(chat_id, telegram_user_id, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS group_members_status_idx ON group_members(chat_id, status)`;
+  await sql`CREATE INDEX IF NOT EXISTS groups_owner_user_id_idx ON groups(owner_user_id, added_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS moderation_actions_group_created_idx ON moderation_actions(chat_id, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS audit_events_group_created_idx ON audit_events(chat_id, created_at DESC)`;
 }
@@ -163,7 +164,7 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
           chat_type = EXCLUDED.chat_type,
           status = EXCLUDED.status,
           timezone = EXCLUDED.timezone,
-          owner_user_id = COALESCE(EXCLUDED.owner_user_id, groups.owner_user_id),
+          owner_user_id = COALESCE(groups.owner_user_id, EXCLUDED.owner_user_id),
           updated_at = NOW()
       `;
     },
@@ -185,7 +186,7 @@ export function createNeonRepo(sql: Sql): PreCrimeRepo {
     },
 
     async listOwnedGroups(ownerId) {
-      const rows = await sql`SELECT * FROM groups WHERE owner_user_id = ${ownerId} ORDER BY added_at DESC LIMIT 10`;
+      const rows = await sql`SELECT * FROM groups WHERE owner_user_id = ${ownerId} ORDER BY added_at DESC`;
       return rows.map((r) => {
         const row = r as Record<string, unknown>;
         return {
