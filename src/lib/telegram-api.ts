@@ -113,7 +113,7 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       return call<{ url: string; pending_update_count: number; last_error_message?: string; max_connections?: number }>("getWebhookInfo");
     },
     async setWebhook(url, secretToken) {
-      const body: Record<string, unknown> = { url, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "chat_join_request"] };
+      const body: Record<string, unknown> = { url, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "chat_join_request", "managed_bot"] };
       if (secretToken) body.secret_token = secretToken;
       return call<boolean>("setWebhook", body);
     },
