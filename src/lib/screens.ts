@@ -86,6 +86,7 @@ export function screenHome(botUsername: string): Screen {
       FOOTER,
     keyboard: [
       [{ text: "➕ إضافة البوت إلى مجموعتي", url: `https://t.me/${botUsername}?startgroup=true` }],
+      [{ text: "🚀 أنشئ نسختك الخاصة", callback_data: encodeCallback("create_clone"), style: "success" }],
       [{ text: "📘 شرح طريقة الاستخدام", callback_data: encodeCallback("guide") }],
     ],
   };
