@@ -112,6 +112,18 @@ export async function POST(
       return Response.json({ ok: false, error: "managed_bot_identity_mismatch" }, { status: 403 });
     }
 
+    // One-time, self-service migration for bots that still have the legacy
+    // shared webhook secret. Do not process the triggering payload: ask
+    // Telegram to retry it after the per-bot secret has taken effect.
+    const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token");
+    if (masterWebhookSecret && safeSecretMatch(suppliedSecret, masterWebhookSecret)) {
+      const rotatedSecret = deriveManagedWebhookSecret(masterWebhookSecret, botId);
+      const webhookUrl = new URL("/api/telegram/managed/" + botId + "/webhook", request.url).toString();
+      await bot.setWebhook(webhookUrl, rotatedSecret);
+      console.warn("managed_bot_legacy_webhook_secret_rotated", { botId });
+      return Response.json({ ok: false, error: "webhook_secret_rotated_retry_delivery" }, { status: 503 });
+    }
+
     stage = "tenant_schema";
     const tenantSql = await createTenantSql(sql, botId);
     const repo = createNeonRepo(tenantSql);
