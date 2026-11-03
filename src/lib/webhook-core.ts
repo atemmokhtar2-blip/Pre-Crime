@@ -1420,6 +1420,15 @@ export function createWebhookHandler(deps: WebhookDeps) {
         }
         if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text)) {
           await handleStart(update.message);
+          if (update.message.chat.type === "private" && update.message.from && admin && await admin.isAdmin(update.message.from.id)) {
+            await bot.sendMessage(update.message.chat.id, "👑 تم تفعيل وصول الأدمن. استخدم الزر لفتح لوحة الإدارة.", {
+              reply_markup: {
+                keyboard: [[{ text: "👑 لوحة الأدمن" }]],
+                resize_keyboard: true,
+                is_persistent: true,
+              },
+            });
+          }
           return { ok: true, processed: true };
         }
         if (update.message.chat.type === "private") {
