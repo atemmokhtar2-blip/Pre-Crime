@@ -108,7 +108,13 @@ export async function POST(request: Request) {
   console.info("telegram_webhook_received", {
     updateId: update.update_id,
     updateType: updateType(update),
+    updateKeys: Object.keys(update),
+    hasManagedBot: Boolean(update.managed_bot),
+    managedBotId: update.managed_bot?.bot.id ?? null,
+    managedBotOwnerId: update.managed_bot?.user.id ?? null,
+    managedBotUsername: update.managed_bot?.bot.username ?? null,
     hasCallbackData: Boolean(update.callback_query?.data),
+    callbackActorId: update.callback_query?.from.id ?? null,
     callbackSection: update.callback_query?.data?.split(":")[1] ?? null,
   });
 
@@ -136,8 +142,10 @@ export async function POST(request: Request) {
     `;
 
     if (claimed.length === 0) {
+      console.warn("telegram_update_duplicate_or_already_processing", { updateId: update.update_id, updateType: updateType(update) });
       return Response.json({ ok: true, duplicate: true });
     }
+    console.info("telegram_update_claimed", { updateId: update.update_id, updateType: updateType(update) });
 
     try {
       const bot = createTelegramApi(token);
@@ -153,7 +161,9 @@ export async function POST(request: Request) {
             throw new Error("managed_bot_encryption_key_missing_or_invalid");
           }
           const managed = update.managed_bot;
+          console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_started", botId: managed.bot.id, ownerId: managed.user.id });
           const childToken = await bot.getManagedBotToken(managed.bot.id);
+          console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_completed", botId: managed.bot.id, tokenReceived: Boolean(childToken), tokenLength: childToken.length });
           const iv = randomBytes(12);
           const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
           const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
@@ -237,6 +247,8 @@ export async function POST(request: Request) {
         
         } catch (error) {
           console.error("managed_bot_provisioning_failed", {
+            updateId: update.update_id,
+            stage: "managed_bot_provisioning",
             botId: update.managed_bot.bot.id,
             ownerId: update.managed_bot.user.id,
             error: error instanceof Error ? error.message : String(error),
