@@ -43,6 +43,7 @@ export function screenHome(tenantMode = false): Screen {
   if (!tenantMode) {
     keyboard.push(
       [btn("⚙️ إعدادات النظام", "sys"), btn("🖥️ السيرفر", "infra")],
+      [btn("🧩 إدارة النسخ", "managed_bots")],
       [btn("🚨 أدوات الطوارئ", "emerg")],
     );
   }
@@ -795,7 +796,7 @@ export function screenManagedBotList(bots: ManagedBotAdminRow[]): Screen {
       `قيد الحذف: ${bots.filter((b) => b.status === "deleting").length}`,
       "",
       bots.length ? "اختر نسخة لعرض تفاصيلها وإدارتها:" : "لا توجد نسخ مسجلة حاليًا.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard,
   };
 }
@@ -825,7 +826,7 @@ export function screenManagedBotDetail(b: ManagedBotAdminRow): Screen {
       `آخر تحديث: ${fmtDate(b.updated_at)}`,
       "",
       b.status === "deleting" ? "⚠️ النسخة قيد الحذف؛ أعد محاولة الحذف لإكمال العملية." : "اختر الإجراء المطلوب من الأزرار بالأسفل.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard,
   };
 }
@@ -841,7 +842,7 @@ export function screenManagedBotDeleteConfirm(b: ManagedBotAdminRow): Screen {
       "",
       "سيتم إلغاء Webhook، ثم حذف سجل النسخة ومخطط قاعدة البيانات الخاص بها بكل الجداول والمستخدمين والمجموعات والإعدادات والسجلات.",
       "⚠️ لا يمكن التراجع عن هذا الإجراء.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard: [
       [btn("🗑️ نعم، احذف كل البيانات نهائيًا", "mb_del_c", b.bot_id)],
       [back("mb_view", b.bot_id)],
