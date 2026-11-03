@@ -45,6 +45,9 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
   if (!statusConstraint.length || !String(statusConstraint[0].definition ?? "").includes("paused")) {
     await sql`ALTER TABLE managed_bots ADD CONSTRAINT managed_bots_status_check CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused'))`;
   }
+  await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Migrate instances paused by the previous admin_suspended implementation.
+  await sql`UPDATE managed_bots SET status = 'paused', updated_at = NOW() WHERE admin_suspended = TRUE AND status = 'active'`;
   await ensureSingleManagedBotPerOwner(sql);
 }
 
@@ -319,7 +322,7 @@ export async function POST(request: Request) {
         async stop(botId) {
           const rows = await sql`SELECT encrypted_token FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
           if (!rows[0]) throw new Error("النسخة غير موجودة.");
-          await sql`UPDATE managed_bots SET status = 'paused', updated_at = NOW() WHERE bot_id = ${botId}`;
+          await sql`UPDATE managed_bots SET status = 'paused', admin_suspended = TRUE, updated_at = NOW() WHERE bot_id = ${botId}`;
           const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
           await child.deleteWebhook(false);
         },
@@ -337,12 +340,12 @@ export async function POST(request: Request) {
           await child.setWebhook(webhookUrl, deriveManagedWebhookSecret(secret, botId));
           const info = await child.getWebhookInfo();
           if (info.url !== webhookUrl || info.last_error_message) throw new Error("فشل التحقق من Webhook بعد إعادة التشغيل.");
-          await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${botId}`;
+          await sql`UPDATE managed_bots SET status = 'active', admin_suspended = FALSE, updated_at = NOW() WHERE bot_id = ${botId}`;
         },
         async deletePermanently(botId) {
           const rows = await sql`SELECT encrypted_token FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
           if (!rows[0]) throw new Error("النسخة غير موجودة.");
-          await sql`UPDATE managed_bots SET status = 'deleting', updated_at = NOW() WHERE bot_id = ${botId}`;
+          await sql`UPDATE managed_bots SET status = 'deleting', admin_suspended = TRUE, updated_at = NOW() WHERE bot_id = ${botId}`;
           const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
           await child.deleteWebhook(true);
           const schema = "tenant_" + botId;
