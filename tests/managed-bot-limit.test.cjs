@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   ensureSingleManagedBotPerOwner,
   findLiveManagedBot,
+  findLiveManagedBotByBotId,
   isManagedBotLimitViolation,
 } = require("../.test-build/managed-bot-limit.js");
 
@@ -37,4 +38,16 @@ test("database unique violations are recognized only for the one-live-bot constr
   assert.equal(isManagedBotLimitViolation({ code: "23505", constraint: "managed_bots_one_live_bot_per_owner" }), true);
   assert.equal(isManagedBotLimitViolation({ code: "23505", constraint: "managed_bots_pkey" }), false);
   assert.equal(isManagedBotLimitViolation(new Error("duplicate")), false);
+});
+
+test("bot identity lookup rejects an already live Telegram bot token identity", async () => {
+  const { sql, calls } = fakeSql([{ bot_id: "456", owner_telegram_id: "88", status: "active" }]);
+  assert.deepEqual(await findLiveManagedBotByBotId(sql, 456), {
+    bot_id: 456,
+    owner_telegram_id: 88,
+    status: "active",
+  });
+  assert.match(calls[0].text, /WHERE bot_id = \?/);
+  assert.match(calls[0].text, /pending_isolation.*active.*suspended_subscription/);
+  await assert.rejects(() => findLiveManagedBotByBotId(sql, 0), /invalid_managed_bot_id/);
 });
