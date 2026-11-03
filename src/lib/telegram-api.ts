@@ -117,6 +117,9 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       if (secretToken) body.secret_token = secretToken;
       return call<boolean>("setWebhook", body);
     },
+    async deleteWebhook(dropPendingUpdates = false) {
+      return call<boolean>("deleteWebhook", { drop_pending_updates: dropPendingUpdates });
+    },
     async sendDocument(chatId, filename, content, caption) {
       const form = new FormData();
       form.append("chat_id", String(chatId));
