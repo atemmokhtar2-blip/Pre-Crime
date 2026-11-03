@@ -112,7 +112,7 @@ export interface SystemConfig {
   notifyErrors: boolean;
   notificationTarget: number | null;
   /** Additional public channels required by this tenant's cloned bot. */
-  subscriptionChannels: string[];
+  subscriptionChannels?: string[];
   protection: GlobalProtectionConfig;
 }
 
