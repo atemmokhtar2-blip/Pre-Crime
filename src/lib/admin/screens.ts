@@ -45,29 +45,21 @@ export interface OverviewStats {
   activity24h: number;
 }
 
-export function screenHome(stats: OverviewStats, recent: AuditRow[], actorName: string): Screen {
-  const lines = recent.slice(0, 6).map((e) => `• ${esc(e.event_type)} — ${esc(e.target ?? "")} (${fmtAgo(e.created_at)})`);
+export function screenHome(stats: OverviewStats, _recent: AuditRow[], _actorName: string): Screen {
   return {
     text: [
-      "👑 لوحة أدمن Pre Crime",
+      "👑 PRE CRIME  /  ADMIN",
       "━━━━━━━━━━━━━━━",
-      `مرحبًا ${esc(actorName)}`,
-      "",
-      `👥 إجمالي المستخدمين: ${stats.users}`,
-      `🛡️ إجمالي المجموعات: ${stats.groups}`,
-      `🟢 النشطة: ${stats.activeGroups}  •  🔴 المعطلة: ${stats.pausedGroups}  •  🚪 غادرها: ${stats.leftGroups}`,
-      `👑 عدد المديرين: ${stats.admins}`,
-      `🔑 التراخيص النشطة: ${stats.activeLicenses}`,
-      `📈 نشاط آخر 24 ساعة: ${stats.activity24h} عملية`,
-      "",
-      "🕒 آخر العمليات:",
-      ...(lines.length ? lines : ["• لا توجد عمليات بعد"]),
-    ].join("\n"),
+      `👥 المستخدمون  ${stats.users}   •   🛡️ المجموعات  ${stats.groups}`,
+      `🟢 نشطة ${stats.activeGroups}   •   🔴 معطلة ${stats.pausedGroups}   •   🚪 غادرها ${stats.leftGroups}`,
+      `👑 المديرون ${stats.admins}   •   🔑 التراخيص ${stats.activeLicenses}`,
+      `📈 نشاط 24 ساعة ${stats.activity24h}`,
+    ].join("\\n"),
     keyboard: [
       [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
       [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
       [btn("📣 الإذاعة", "bcast"), btn("🛡️ الحماية العامة", "prot")],
-      [btn("📊 الإحصائيات والتقارير", "analytics"), btn("📜 سجل العمليات", "logs")],
+      [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
       [btn("⚙️ إعدادات النظام", "sys"), btn("🖥️ السيرفر", "infra")],
       [btn("🚨 أدوات الطوارئ", "emerg")],
       [refresh("home")],
@@ -79,7 +71,7 @@ export function screenHome(stats: OverviewStats, recent: AuditRow[], actorName: 
 
 export function screenUsersMenu(): Screen {
   return {
-    text: "👥 إدارة المستخدمين\n━━━━━━━━━━━━━━━\nاختر القسم المطلوب:",
+    text: "👥 إدارة المستخدمين\n━━━━━━━━━━━━━━━\n",
     keyboard: [
       [btn("📋 جميع المستخدمين", "u_list", "all", 0)],
       [btn("🟢 المستخدمون النشطون", "u_list", "active", 0), btn("🚫 المحظورون", "u_list", "banned", 0)],
@@ -108,7 +100,7 @@ export function screenUserList(users: BotUserRow[], filter: string, page: number
   if (p.pages > 1) keyboard.push(pagerRow("u_page", p.page, p.pages, filter));
   keyboard.push([btn("🔎 بحث", "u_search")], [back("users")]);
   return {
-    text: `👥 ${USER_FILTER_TITLES[filter] ?? "المستخدمون"} (${p.total})\n━━━━━━━━━━━━━━━\nاختر مستخدمًا لعرض ملفه:`,
+    text: `👥 ${USER_FILTER_TITLES[filter] ?? "المستخدمون"} (${p.total})\n━━━━━━━━━━━━━━━\n`,
     keyboard,
   };
 }
@@ -168,7 +160,7 @@ export function screenUserGroups(user: BotUserRow, groups: GroupItem[]): Screen 
 
 export function screenGroupsMenu(): Screen {
   return {
-    text: "🛡️ إدارة المجموعات\n━━━━━━━━━━━━━━━\nاختر القسم المطلوب:",
+    text: "🛡️ إدارة المجموعات\n━━━━━━━━━━━━━━━\n",
     keyboard: [
       [btn("📋 جميع المجموعات", "g_list", "all", 0)],
       [btn("🟢 النشطة", "g_list", "active", 0), btn("🔴 المعطلة", "g_list", "paused", 0)],
@@ -200,7 +192,7 @@ export function screenGroupList(groups: GroupItem[], filter: string, page: numbe
   if (p.pages > 1) keyboard.push(pagerRow("g_page", p.page, p.pages, filter));
   keyboard.push([btn("🔎 بحث", "g_search")], [back("groups")]);
   return {
-    text: `🛡️ ${GROUP_FILTER_TITLES[filter] ?? "المجموعات"} (${p.total})\n━━━━━━━━━━━━━━━\nاختر مجموعة لعرض بياناتها:`,
+    text: `🛡️ ${GROUP_FILTER_TITLES[filter] ?? "المجموعات"} (${p.total})\n━━━━━━━━━━━━━━━\n`,
     keyboard,
   };
 }
@@ -356,7 +348,7 @@ export function screenLicenseList(licenses: LicenseRow[], filter: string, page: 
   ]);
   if (p.pages > 1) keyboard.push(pagerRow("l_page", p.page, p.pages, filter));
   keyboard.push([btn("➕ إنشاء كود", "l_new")], [back("licenses")]);
-  return { text: `🔑 التراخيص (${p.total})\n━━━━━━━━━━━━━━━\nاختر ترخيصًا لعرض تفاصيله:`, keyboard };
+  return { text: `🔑 التراخيص (${p.total})\n━━━━━━━━━━━━━━━\n`, keyboard };
 }
 
 export function screenLicenseNew(kind: string, days: number): Screen {
@@ -410,7 +402,7 @@ export function screenLicenseDetail(l: LicenseRow, linkedName: string | null): S
 
 export function screenBroadcastMenu(): Screen {
   return {
-    text: "📣 الإذاعة والرسائل\n━━━━━━━━━━━━━━━\nاختر الجمهور المستهدف للرسالة:",
+    text: "📣 الإذاعة والرسائل\n━━━━━━━━━━━━━━━\n",
     keyboard: [
       [btn("👥 جميع المستخدمين", "bc_start", "all_users")],
       [btn("🎯 مستخدمون محددون", "bc_start", "selected_users")],
@@ -531,7 +523,7 @@ export function screenDomainList(domains: string[]): Screen {
 
 export function screenAnalyticsMenu(): Screen {
   return {
-    text: "📊 الإحصائيات والتقارير\n━━━━━━━━━━━━━━━\nاختر التقرير المطلوب:",
+    text: "📊 الإحصائيات والتقارير\n━━━━━━━━━━━━━━━\n",
     keyboard: [
       [btn("👥 إحصائيات المستخدمين", "an_users"), btn("🛡️ إحصائيات المجموعات", "an_groups")],
       [btn("🔑 إحصائيات التفعيلات", "an_licenses"), btn("🛡️ إحصائيات الحماية", "an_prot")],
@@ -584,7 +576,7 @@ export function screenLogList(events: AuditRow[], filter: string, page: number):
   if (p.pages > 1) keyboard.push(pagerRow("log_page", p.page, p.pages, filter));
   keyboard.push([back("logs")]);
   return {
-    text: `📜 ${title} (${p.total})\n━━━━━━━━━━━━━━━\n${p.items.length ? "اختر عملية لعرض تفاصيلها:" : "لا توجد عمليات مسجلة."}`,
+    text: `📜 ${title} (${p.total})\n━━━━━━━━━━━━━━━\n${p.items.length ? "" : "لا توجد عمليات مسجلة."}`,
     keyboard,
   };
 }
@@ -648,7 +640,7 @@ export function screenNotificationsSettings(cfg: SystemConfig): Screen {
   ]);
   keyboard.push([btn("🎯 جهة استقبال الإشعارات", "sys_notif_target")], [back("sys")]);
   return {
-    text: `🔔 إعدادات الإشعارات\n━━━━━━━━━━━━━━━\nجهة الاستقبال الحالية: ${cfg.notificationTarget ?? "المالكون"}\n\nاضغط لتبديل أي إشعار:`,
+    text: `🔔 إعدادات الإشعارات\n━━━━━━━━━━━━━━━\nجهة الاستقبال الحالية: ${cfg.notificationTarget ?? "المالكون"}\n\n`,
     keyboard,
   };
 }
