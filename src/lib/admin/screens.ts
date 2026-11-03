@@ -33,7 +33,7 @@ const btn = (text: string, key: string, ...args: (string | number)[]): InlineKey
 
 // ============ 1. الرئيسية ============
 
-export function screenHome(tenantMode = false, ownerMode = true): Screen {
+export function screenHome(tenantMode = false): Screen {
   const keyboard: InlineKeyboardButton[][] = [
     [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
     [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
@@ -41,8 +41,8 @@ export function screenHome(tenantMode = false, ownerMode = true): Screen {
     [btn("📊 التقارير", "analytics"), btn("📜 السجلات", "logs")],
   ];
   if (!tenantMode) {
+    keyboard.push([btn("🤖 إدارة النسخ", "mb_list", "all", 0)]);
     keyboard.push(
-      ...(ownerMode ? [[btn("🤖 إدارة النسخ", "mb_list", 0)]] : []),
       [btn("⚙️ إعدادات النظام", "sys"), btn("🖥️ السيرفر", "infra")],
       [btn("🚨 أدوات الطوارئ", "emerg")],
     );
@@ -754,82 +754,6 @@ export function screenConfirm(action: string, label: string, payload: string): S
   };
 }
 
-
-export interface ManagedBotScreenRow {
-  bot_id: number;
-  owner_telegram_id: number;
-  owner_username: string | null;
-  bot_username: string | null;
-  bot_display_name: string;
-  status: string;
-  admin_suspended: boolean;
-  created_at: string;
-}
-
-export function screenManagedBotList(bots: ManagedBotScreenRow[], page: number): Screen {
-  const p = paginate(bots, page);
-  const keyboard: InlineKeyboardButton[][] = p.items.map((b) => [
-    btn(`${b.admin_suspended ? "⏸️" : b.status === "active" ? "🟢" : "🔴"} ${trunc(b.bot_username ? "@" + b.bot_username : b.bot_display_name || String(b.bot_id), 26)} • ${b.owner_telegram_id}`, "mb_view", b.bot_id),
-  ]);
-  if (p.pages > 1) keyboard.push(pagerRow("mb_page", p.page, p.pages));
-  keyboard.push([refresh("mb_list", 0)], [back("home")]);
-  return {
-    text: `🤖 إدارة النسخ الخاصة (${p.total})\n━━━━━━━━━━━━━━━\nاختر نسخة لعرض تفاصيلها وإدارتها.\n\n🟢 تعمل • ⏸️ موقوفة إداريًا • 🔴 غير نشطة`,
-    keyboard,
-  };
-}
-
-export function screenManagedBotDetail(bot: ManagedBotScreenRow): Screen {
-  const status = bot.admin_suspended ? "⏸️ موقوفة إداريًا" : bot.status === "active" ? "🟢 نشطة" : bot.status === "suspended_subscription" ? "⛔ موقوفة بسبب الاشتراك" : "🔴 " + bot.status;
-  const keyboard: InlineKeyboardButton[][] = [];
-  if (bot.admin_suspended) keyboard.push([btn("▶️ رفع الإيقاف الإداري", "mb_resume", bot.bot_id)]);
-  else if (bot.status === "active") keyboard.push([btn("⏸️ إيقاف النسخة", "mb_suspend", bot.bot_id)]);
-  keyboard.push([btn("🗑️ حذف النسخة نهائيًا", "mb_delete_ask", bot.bot_id)]);
-  keyboard.push([refresh("mb_view", bot.bot_id), back("mb_list", 0)]);
-  return {
-    text: [
-      "🤖 تفاصيل النسخة",
-      "━━━━━━━━━━━━━━━",
-      `اسم البوت: ${esc(bot.bot_display_name || "—")}`,
-      `Username: ${bot.bot_username ? "@" + esc(bot.bot_username) : "—"}`,
-      `Bot ID: ${bot.bot_id}`,
-      `المالك: ${bot.owner_username ? "@" + esc(bot.owner_username) : "—"}`,
-      `Owner Telegram ID: ${bot.owner_telegram_id}`,
-      `الحالة: ${status}`,
-      `تاريخ الإنشاء: ${fmtDate(bot.created_at)}`,
-      "",
-      "الإجراءات المتاحة:",
-      "• إيقاف مؤقت يمنع تشغيل الـWebhook.",
-      "• إعادة التشغيل تعيد ضبط الـWebhook بعد التحقق من هوية البوت.",
-      "• الحذف النهائي يمسح كل بيانات مساحة النسخة.",
-    ].join("\n"),
-    keyboard,
-  };
-}
-
-export function screenManagedBotDeleteConfirm(bot: ManagedBotScreenRow): Screen {
-  return {
-    text: [
-      "🚨 تأكيد الحذف النهائي",
-      "━━━━━━━━━━━━━━━",
-      `البوت: ${bot.bot_username ? "@" + esc(bot.bot_username) : bot.bot_id}`,
-      `Bot ID: ${bot.bot_id}`,
-      `المالك: ${bot.owner_telegram_id}`,
-      "",
-      "سيتم تنفيذ الآتي نهائيًا:",
-      "1) إيقاف Webhook وحذف التحديثات المعلقة.",
-      "2) حذف مخطط tenant الخاص بالنسخة مع جميع الجداول والأعضاء والمجموعات والإعدادات والسجلات.",
-      "3) حذف سجل النسخة والتوكن المشفر من managed_bots.",
-      "",
-      "⚠️ لا يمكن التراجع عن هذا الإجراء أو استعادة البيانات بعده.",
-    ].join("\n"),
-    keyboard: [
-      [btn("🗑️ نعم، احذف كل بيانات النسخة", "mb_delete_confirm", bot.bot_id)],
-      [btn("❌ إلغاء والعودة", "mb_view", bot.bot_id)],
-    ],
-  };
-}
-
 export function screenDenied(): Screen {
   return {
     text: "⛔ غير مصرح\n━━━━━━━━━━━━━━━\nلا تملك الصلاحية المطلوبة لهذا الإجراء.\nتم تسجيل محاولة الوصول.",
@@ -842,3 +766,57 @@ export function screenInfo(title: string, body: string, backTo = "home", ...back
 }
 
 export { PAGE_SIZE };
+
+
+export interface ManagedBotAdminRow {
+  bot_id: number;
+  owner_telegram_id: number;
+  owner_username: string | null;
+  bot_username: string | null;
+  bot_display_name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function screenManagedBotList(bots: ManagedBotAdminRow[], filter: string, page: number): Screen {
+  const p = paginate(bots, page);
+  const status = (s: string) => s === "active" ? "🟢" : s === "paused" ? "⏸️" : s === "deleting" ? "🗑️" : s === "suspended_subscription" ? "🔒" : "🟡";
+  const keyboard: InlineKeyboardButton[][] = [
+    [btn("📋 الكل", "mb_list", "all", 0), btn("🟢 النشطة", "mb_list", "active", 0), btn("⏸️ المتوقفة", "mb_list", "stopped", 0)],
+    ...p.items.map((b) => [{ text: `${status(b.status)} ${trunc(b.bot_username ? "@" + b.bot_username : b.bot_display_name || String(b.bot_id), 22)} · ${b.owner_telegram_id}`, callback_data: ac("mb_view", b.bot_id) }]),
+  ];
+  if (p.pages > 1) keyboard.push(pagerRow("mb_page", p.page, p.pages, filter));
+  keyboard.push([btn("🔄 تحديث", "mb_list", filter, page)], [back("home")]);
+  return { text: `🤖 إدارة النسخ (${p.total})\n━━━━━━━━━━━━━━━\n🟢 نشطة  ⏸️ موقوفة  🔒 اشتراك معلّق\nاختر نسخة لعرض إجراءاتها:`, keyboard };
+}
+
+export function screenManagedBotDetail(b: ManagedBotAdminRow): Screen {
+  const status = b.status === "active" ? "🟢 نشطة" : b.status === "paused" ? "⏸️ متوقفة" : b.status === "deleting" ? "🗑️ قيد الحذف" : b.status === "suspended_subscription" ? "🔒 اشتراك معلّق" : "🟡 قيد التفعيل";
+  const keyboard: InlineKeyboardButton[][] = [];
+  if (b.status === "active" || b.status === "pending_isolation" || b.status === "suspended_subscription") keyboard.push([btn("⏸️ إيقاف النسخة", "mb_stop", b.bot_id)]);
+  else if (b.status === "paused") keyboard.push([btn("▶️ إعادة تشغيل النسخة", "mb_resume", b.bot_id)]);
+  if (b.status !== "deleting") keyboard.push([btn("🗑️ حذف نهائي للنسخة", "mb_delete", b.bot_id)]);
+  keyboard.push([refresh("mb_view", b.bot_id), back("mb_list", "all", 0)]);
+  return { text: [
+    "🤖 تفاصيل النسخة", "━━━━━━━━━━━━━━━",
+    `اسم البوت: ${esc(b.bot_display_name || "—")}`,
+    `Username: ${b.bot_username ? "@" + esc(b.bot_username) : "—"}`,
+    `Bot ID: ${b.bot_id}`, `صاحب النسخة: ${b.owner_username ? "@" + esc(b.owner_username) : "—"}`,
+    `Telegram ID للمالك: ${b.owner_telegram_id}`, `الحالة: ${status}`,
+    `تاريخ الإنشاء: ${fmtDate(b.created_at)}`, `آخر تحديث: ${fmtDate(b.updated_at)}`,
+  ].join("\n"), keyboard };
+}
+
+export function screenManagedBotDeleteConfirm(b: ManagedBotAdminRow): Screen {
+  return { text: [
+    "⚠️ تأكيد الحذف النهائي", "━━━━━━━━━━━━━━━",
+    `البوت: ${b.bot_username ? "@" + esc(b.bot_username) : b.bot_id}`,
+    `المالك: ${b.owner_telegram_id}`, "",
+    "سيتم إلغاء Webhook وحذف سجل النسخة نهائيًا، ثم حذف مساحة tenant الخاصة بها بكل الجداول والبيانات والإعدادات والسجلات.",
+    "هذا الإجراء لا يمكن التراجع عنه.", "", "هل أنت متأكد من المتابعة؟",
+  ].join("\n"), keyboard: [
+    [btn("🗑️ نعم، احذف كل البيانات نهائيًا", "mb_delete_confirm", b.bot_id)],
+    [back("mb_view", b.bot_id)],
+  ] };
+}
