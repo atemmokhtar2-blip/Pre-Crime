@@ -3,6 +3,7 @@ import type {
   ChatMemberInfo,
   InlineKeyboardMarkup,
   ForceReplyMarkup,
+  ReplyKeyboardMarkup,
 } from "./types";
 
 // Thin typed wrapper around the Telegram Bot API. Deliberately dependency-free
