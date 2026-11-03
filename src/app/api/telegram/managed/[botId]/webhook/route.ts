@@ -52,13 +52,18 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ botId: string }> },
 ) {
-  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expectedSecret || !safeSecretMatch(request.headers.get("x-telegram-bot-api-secret-token"), expectedSecret)) {
-    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-
+  const startedAt = Date.now();
   const { botId: rawBotId } = await context.params;
   const botId = Number(rawBotId);
+  console.info("managed_bot_webhook_request", {
+    botId: Number.isSafeInteger(botId) ? botId : rawBotId,
+    hasSecretHeader: Boolean(request.headers.get("x-telegram-bot-api-secret-token")),
+  });
+  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!expectedSecret || !safeSecretMatch(request.headers.get("x-telegram-bot-api-secret-token"), expectedSecret)) {
+    console.error("managed_bot_webhook_auth_failed", { botId, expectedSecretConfigured: Boolean(expectedSecret) });
+    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
   if (!Number.isSafeInteger(botId) || botId <= 0) {
     return Response.json({ ok: false, error: "invalid_bot_id" }, { status: 400 });
   }
@@ -74,28 +79,45 @@ export async function POST(
   }
 
   const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) return Response.json({ ok: false, error: "server_configuration_missing" }, { status: 503 });
+  if (!databaseUrl) {
+    console.error("managed_bot_webhook_config_missing", { botId, databaseUrlConfigured: false });
+    return Response.json({ ok: false, error: "server_configuration_missing" }, { status: 503 });
+  }
 
+  let stage = "database_lookup";
   try {
     const sql = neon(databaseUrl) as unknown as Sql;
     const rows = await sql`SELECT encrypted_token, status, owner_telegram_id FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
     const record = rows[0];
+    console.info("managed_bot_db_lookup", { botId, found: Boolean(record), status: record?.status ?? null });
     if (!record || record.status !== "active") {
+      console.error("managed_bot_inactive_or_missing", { botId, found: Boolean(record), status: record?.status ?? null });
       return Response.json({ ok: false, error: "managed_bot_not_active" }, { status: 403 });
     }
 
+    stage = "token_decryption";
     const token = decryptToken(String(record.encrypted_token));
+    console.info("managed_bot_token_decrypted", { botId });
+    stage = "telegram_get_me";
     const bot = createTelegramApi(token);
     const identity = await bot.getMe();
+    console.info("managed_bot_identity_verified", { botId, actualBotId: identity.id, username: identity.username ?? null });
     if (identity.id !== botId) {
       console.error("managed_bot_identity_mismatch", { botId, actualBotId: identity.id });
       return Response.json({ ok: false, error: "managed_bot_identity_mismatch" }, { status: 403 });
     }
 
+    stage = "tenant_schema";
     const tenantSql = await createTenantSql(sql, botId);
     const repo = createNeonRepo(tenantSql);
     await repo.ensureSchema();
+    console.info("managed_bot_tenant_schema_ready", { botId });
 
+    stage = "claim_update";
+    console.info("managed_bot_update_received", {
+      botId, updateId: update.update_id, updateType: updateType(update),
+      chatId: chatIdOf(update), isStart: Boolean(update.message?.text?.trim().match(/^\\/start(?:@\\w+)?(?:\\s|$)/i)),
+    });
     const claimed = await tenantSql`
       INSERT INTO telegram_updates (update_id, update_type, chat_id, status)
       VALUES (${update.update_id}, ${updateType(update)}, ${chatIdOf(update)}, 'processing')
@@ -105,9 +127,13 @@ export async function POST(
            OR (telegram_updates.status = 'processing' AND telegram_updates.received_at < NOW() - INTERVAL '2 minutes')
       RETURNING update_id
     `;
-    if (claimed.length === 0) return Response.json({ ok: true, duplicate: true });
+    if (claimed.length === 0) {
+      console.info("managed_bot_duplicate_update", { botId, updateId: update.update_id });
+      return Response.json({ ok: true, duplicate: true });
+    }
 
     try {
+      stage = "update_handler";
       const handler = createWebhookHandler({ repo, bot, supportOwnerId: Number(record.owner_telegram_id) });
       await handler.handleUpdate(update);
       await tenantSql`
@@ -115,6 +141,7 @@ export async function POST(
         SET status = 'processed', processed_at = NOW(), error_code = NULL
         WHERE update_id = ${update.update_id}
       `;
+      console.info("managed_bot_update_processed", { botId, updateId: update.update_id, durationMs: Date.now() - startedAt });
       return Response.json({ ok: true, processed: true });
     } catch (error) {
       console.error("managed_bot_update_failed", {
@@ -134,6 +161,8 @@ export async function POST(
     console.error("managed_bot_webhook_failed", {
       botId,
       updateId: update.update_id,
+      stage,
+      durationMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
     });
     return Response.json({ ok: false, error: "temporary_persistence_failure" }, { status: 503 });
