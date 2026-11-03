@@ -705,13 +705,17 @@ export function createWebhookHandler(deps: WebhookDeps) {
     }
 
     if (section === "create_clone") {
+      const traceId = `clone-${Date.now()}-${actorId}`;
+      console.info("clone_trace_started", { traceId, actorId, chatId, chatType: chat.type, callbackId: update.id });
       if (chat.type !== "private") {
         await ack(update.id, "إنشاء النسخة متاح من الخاص فقط.", true);
         return;
       }
       const channelId = "@K_J6k";
       try {
+        console.info("clone_trace_step", { traceId, step: "subscription_check_started", channelId });
         const membership = await bot.getChatMember(channelId, actorId);
+        console.info("clone_trace_step", { traceId, step: "subscription_check_completed", membershipStatus: membership.status });
         if (!["member", "administrator", "creator"].includes(membership.status)) {
           const channel = await bot.getChat(channelId).catch(() => null);
           const joinUrl = channel?.username ? `https://t.me/${channel.username}` : channel?.invite_link;
@@ -721,7 +725,9 @@ export function createWebhookHandler(deps: WebhookDeps) {
           await ack(update.id, "يجب الاشتراك في القناة أولًا.", true);
           return;
         }
+        console.info("clone_trace_step", { traceId, step: "manager_identity_check_started" });
         const manager = await bot.getMe();
+        console.info("clone_trace_step", { traceId, step: "manager_identity_check_completed", managerBotId: manager.id, managerUsername: manager.username ?? null, canManageBots: manager.can_manage_bots === true });
         if (!manager.can_manage_bots || !manager.username) {
           await bot.sendMessage(chatId, "⚙️ يلزم تفعيل Bot Management Mode للبوت الأساسي مرة واحدة من إعدادات البوت داخل BotFather Mini App. بعد تفعيله أعد المحاولة.");
           await ack(update.id, "وضع إدارة البوتات غير مفعّل بعد.", true);
@@ -730,12 +736,16 @@ export function createWebhookHandler(deps: WebhookDeps) {
         const suggestedUsername = `PreCrime${actorId}Bot`;
         const displayName = encodeURIComponent(`Pre Crime ${update.from.first_name ?? "User"}`);
         const url = `https://t.me/newbot/${manager.username}/${suggestedUsername}?name=${displayName}`;
+        console.info("clone_trace_link_ready", { traceId, managerUsername: manager.username, suggestedUsername, urlHost: "t.me", urlPath: `/newbot/${manager.username}/${suggestedUsername}` });
+        console.info("clone_trace_step", { traceId, step: "creation_link_send_started" });
         await bot.sendMessage(chatId, "🚀 اضغط الرابط التالي لإكمال إنشاء نسختك داخل تيليجرام. الاسم واسم المستخدم مقترحان ويمكنك تعديلهما قبل التأكيد:", {
           reply_markup: { inline_keyboard: [[{ text: "إنشاء البوت الخاص بي", url }]] },
         });
+        console.info("clone_trace_step", { traceId, step: "creation_link_sent" });
         await ack(update.id, "تم تجهيز رابط إنشاء نسختك.");
+        console.info("clone_trace_finished", { traceId, outcome: "link_sent_waiting_for_managed_bot_update" });
       } catch (error) {
-        console.error("managed_bot_creation_precheck_failed", error instanceof Error ? error.message : String(error));
+        console.error("clone_trace_failed", { traceId, step: "precheck_or_link_send", errorName: error instanceof Error ? error.name : "unknown", error: error instanceof Error ? error.message : String(error) });
         await ack(update.id, "تعذر التحقق من اشتراكك الآن. حاول مرة أخرى بعد قليل.", true);
       }
       return;
