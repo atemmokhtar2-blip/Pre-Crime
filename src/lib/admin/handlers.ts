@@ -343,9 +343,11 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         return true;
 
       // ============ إدارة النسخ (المالك الأساسي فقط) ============
-      case "managed_bots": {
+      case "managed_bots":
+      case "mb_page": {
+        const page = key === "mb_page" ? (numArg(0) ?? 0) : 0;
         await ack(update.id);
-        await showScreen(screenManagedBotList(await store.listManagedBots()));
+        await showScreen(screenManagedBotList(await store.listManagedBots(), page));
         return true;
       }
       case "mb_view": {
