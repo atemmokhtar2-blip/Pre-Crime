@@ -66,7 +66,7 @@ export function createTelegramApi(token: string, fetchImpl: typeof fetch = fetch
       return call<unknown>("deleteMessage", { chat_id: chatId, message_id: messageId });
     },
     async getChat(chatId) {
-      return call<{ id: number; title?: string; username?: string; type: string }>("getChat", { chat_id: chatId });
+      return call<{ id: number; title?: string; username?: string; invite_link?: string; type: string }>("getChat", { chat_id: chatId });
     },
     async getChatMember(chatId, userId) {
       return call<ChatMemberInfo>("getChatMember", { chat_id: chatId, user_id: userId });
