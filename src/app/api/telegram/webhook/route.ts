@@ -345,13 +345,12 @@ export async function POST(request: Request) {
           if (!rows.length) throw new Error("managed_bot_not_found");
           // Mark first: all incoming webhook requests are denied before cleanup starts.
           await sql`UPDATE managed_bots SET status = 'deleting', admin_suspended = true, updated_at = NOW() WHERE bot_id = ${botId}`;
-          try {
-            const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
-            const identity = await child.getMe();
-            if (identity.id === botId) await child.deleteWebhook(true);
-          } catch (error) {
-            console.warn("managed_bot_delete_webhook_cleanup_failed", { botId, error: error instanceof Error ? error.message : String(error) });
-          }
+          const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
+          const identity = await child.getMe();
+          if (identity.id !== botId) throw new Error("managed_bot_identity_mismatch");
+          // Do not erase the encrypted token or tenant schema until Telegram
+          // confirms webhook removal; a retry can safely finish an interrupted delete.
+          await child.deleteWebhook(true);
           await dropTenantSchema(sql, botId);
           await sql`DELETE FROM managed_bots WHERE bot_id = ${botId} AND status = 'deleting'`;
         },
