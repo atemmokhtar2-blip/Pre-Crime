@@ -126,7 +126,7 @@ export interface BotApi {
   sendMessage(
     chatId: number,
     text: string,
-    opts?: { reply_markup?: InlineKeyboardMarkup | ForceReplyMarkup; reply_to_message_id?: number },
+    opts?: { reply_markup?: InlineKeyboardMarkup | ForceReplyMarkup | ReplyKeyboardMarkup; reply_to_message_id?: number },
   ): Promise<{ message_id: number }>;
   sendRichMessage(
     chatId: number,
@@ -167,6 +167,7 @@ export type InlineKeyboardButton =
 
 export type InlineKeyboardMarkup = { inline_keyboard: InlineKeyboardButton[][] };
 export type ForceReplyMarkup = { force_reply: true; input_field_placeholder?: string };
+export type ReplyKeyboardMarkup = { keyboard: Array<Array<{ text: string }>>; resize_keyboard?: boolean; is_persistent?: boolean; one_time_keyboard?: boolean; input_field_placeholder?: string };
 
 export interface ChatMemberInfo {
   status: MemberStatus;
