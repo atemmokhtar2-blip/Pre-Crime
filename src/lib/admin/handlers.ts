@@ -350,7 +350,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       case "sub_add": {
         await repo.setPending({ chat_id: chatId, group_id: 0, action: "adm_sub_add", context: {} });
         await ack(update.id);
-        await bot.sendMessage(chatId, "📢 أرسل Username القناة العامة مثل @MyChannel.\\nيجب إضافة البوت المستنسخ مشرفًا في القناة قبل إضافتها.", {
+        await bot.sendMessage(chatId, "📢 أرسل Username القناة العامة مثل @MyChannel.\nيجب إضافة البوت المستنسخ مشرفًا في القناة قبل إضافتها.", {
           reply_markup: { force_reply: true, input_field_placeholder: "@ChannelUsername" },
         });
         return true;
