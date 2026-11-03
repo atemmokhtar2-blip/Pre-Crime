@@ -283,6 +283,93 @@ export async function POST(request: Request) {
         webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
       });
       const handler = createWebhookHandler({ repo, bot, admin });
+
+      // Manual clone-token onboarding. Never log or retain the plaintext token.
+      if (update.message?.chat.type === "private" && update.message.from && update.message.text) {
+        const pending = await repo.getPending(update.message.chat.id);
+        if (pending?.action === "clone_token" && pending.context.ownerId === update.message.from.id) {
+          const ownerId = update.message.from.id;
+          const rawToken = update.message.text.trim();
+          await bot.deleteMessage(update.message.chat.id, update.message.message_id).catch(() => undefined);
+          if (!/^\d{5,15}:[A-Za-z0-9_-]{20,}$/.test(rawToken)) {
+            await bot.sendMessage(ownerId, "⚠️ صيغة التوكن غير صحيحة. أرسل التوكن كما نسخته من BotFather.");
+            await sql`UPDATE pending_actions SET created_at = NOW() WHERE chat_id = ${ownerId} AND action = 'clone_token'`;
+            await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW() WHERE update_id = ${update.update_id}`;
+            return Response.json({ ok: true, processed: true });
+          }
+          try {
+            const membership = await bot.getChatMember("@K_J6k", ownerId);
+            if (!["member", "administrator", "creator"].includes(membership.status)) {
+              await repo.clearPending(ownerId);
+              await bot.sendMessage(ownerId, "🔒 اشترك في قناة Pre Crime أولًا ثم ابدأ طلب إنشاء النسخة من جديد.");
+              await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW() WHERE update_id = ${update.update_id}`;
+              return Response.json({ ok: true, processed: true });
+            }
+            const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
+            if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) throw new Error("managed_bot_encryption_key_missing_or_invalid");
+            const childBot = createTelegramApi(rawToken);
+            const identity = await childBot.getMe();
+            if (!identity.username) throw new Error("bot_username_unavailable");
+            const iv = randomBytes(12);
+            const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
+            const encrypted = Buffer.concat([cipher.update(rawToken, "utf8"), cipher.final()]);
+            const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
+            await sql`
+              CREATE TABLE IF NOT EXISTS managed_bots (
+                bot_id BIGINT PRIMARY KEY,
+                owner_telegram_id BIGINT NOT NULL,
+                owner_username TEXT,
+                bot_username TEXT,
+                bot_display_name TEXT NOT NULL DEFAULT '',
+                encrypted_token TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending_isolation'
+                  CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              )
+            `;
+            const saved = await sql`
+              INSERT INTO managed_bots
+                (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
+              VALUES
+                (${identity.id}, ${ownerId}, ${update.message.from.username ?? null},
+                 ${identity.username}, ${identity.first_name ?? ""}, ${tokenCiphertext}, 'pending_isolation')
+              ON CONFLICT (bot_id) DO UPDATE SET
+                owner_username = EXCLUDED.owner_username,
+                bot_username = EXCLUDED.bot_username,
+                bot_display_name = EXCLUDED.bot_display_name,
+                encrypted_token = EXCLUDED.encrypted_token,
+                status = 'pending_isolation',
+                updated_at = NOW()
+              WHERE managed_bots.owner_telegram_id = EXCLUDED.owner_telegram_id
+              RETURNING bot_id
+            `;
+            if (!saved.length) throw new Error("bot_already_registered_to_another_owner");
+            const tenantSql = await createTenantSql(sql, identity.id);
+            await createNeonRepo(tenantSql).ensureSchema();
+            const appOrigin = process.env.APP_URL
+              ? new URL(process.env.APP_URL).origin
+              : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin;
+            const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+            if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
+            const webhookUrl = new URL("/api/telegram/managed/" + identity.id + "/webhook", appOrigin).toString();
+            await childBot.setWebhook(webhookUrl, webhookSecret);
+            const info = await childBot.getWebhookInfo();
+            if (info.url !== webhookUrl || info.last_error_message) throw new Error("child_webhook_verification_failed");
+            await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id} AND owner_telegram_id = ${ownerId}`;
+            await repo.clearPending(ownerId);
+            await bot.sendMessage(ownerId, "🎉 تم تفعيل نسختك @" + identity.username + " بنجاح! افتح البوت وأرسل /start.");
+          } catch (error) {
+            console.error("manual_clone_token_provisioning_failed", {
+              ownerId, error: error instanceof Error ? error.message : "unknown_error",
+            });
+            await repo.clearPending(ownerId);
+            await bot.sendMessage(ownerId, "⚠️ لم نتمكن من تفعيل النسخة. تأكد أن التوكن صحيح وأن البوت غير مربوط بحساب آخر، ثم ابدأ من جديد. لم يتم تسجيل التوكن كنص مكشوف.");
+          }
+          await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
+          return Response.json({ ok: true, processed: true });
+        }
+      }
       await handler.handleUpdate(update);
 
       await sql`
