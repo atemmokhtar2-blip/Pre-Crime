@@ -2,6 +2,7 @@ import { createDecipheriv } from "node:crypto";
 import type { Sql } from "./db";
 import { createTelegramApi } from "./telegram-api";
 import { deriveManagedWebhookSecret } from "./managed-webhook-secret";
+import { ensureSingleManagedBotPerOwner } from "./managed-bot-limit";
 
 export interface ManagedBotAdminRow {
   bot_id: number;
@@ -26,6 +27,21 @@ function decryptToken(payload: string): string {
 
 export function createManagedBotAdmin(sql: Sql, options: { appOrigin: string; webhookSecret: string }) {
   async function ensureColumn(): Promise<void> {
+    await sql`
+      CREATE TABLE IF NOT EXISTS managed_bots (
+        bot_id BIGINT PRIMARY KEY,
+        owner_telegram_id BIGINT NOT NULL,
+        owner_username TEXT,
+        bot_username TEXT,
+        bot_display_name TEXT NOT NULL DEFAULT '',
+        encrypted_token TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending_isolation'
+          CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await ensureSingleManagedBotPerOwner(sql);
     await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
   }
 
