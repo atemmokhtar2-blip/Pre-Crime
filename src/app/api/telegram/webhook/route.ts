@@ -189,7 +189,7 @@ export async function POST(request: Request) {
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
           `;
-          await sql`
+          const managedSaved = await sql`
             INSERT INTO managed_bots
               (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
             VALUES
@@ -197,14 +197,16 @@ export async function POST(request: Request) {
                ${managed.bot.username ?? null}, ${managed.bot.first_name ?? ""}, ${tokenCiphertext},
                ${subscribed ? "pending_isolation" : "suspended_subscription"})
             ON CONFLICT (bot_id) DO UPDATE SET
-              owner_telegram_id = EXCLUDED.owner_telegram_id,
               owner_username = EXCLUDED.owner_username,
               bot_username = EXCLUDED.bot_username,
               bot_display_name = EXCLUDED.bot_display_name,
               encrypted_token = EXCLUDED.encrypted_token,
               status = EXCLUDED.status,
               updated_at = NOW()
+            WHERE managed_bots.owner_telegram_id = EXCLUDED.owner_telegram_id
+            RETURNING bot_id
           `;
+          if (!managedSaved.length) throw new Error("managed_bot_already_owned_by_another_user");
           if (subscribed) {
             const childBot = createTelegramApi(childToken);
             const childIdentity = await childBot.getMe();
