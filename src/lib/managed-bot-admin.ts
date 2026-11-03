@@ -77,7 +77,7 @@ export function createManagedBotAdmin(sql: Sql, options: { appOrigin: string; we
       await bot.setWebhook(webhookUrl, deriveManagedWebhookSecret(options.webhookSecret, botId));
       const info = await bot.getWebhookInfo();
       if (info.url !== webhookUrl || info.last_error_message) throw new Error("managed_bot_webhook_verification_failed");
-      await sql`UPDATE managed_bots SET admin_suspended = FALSE, status = 'active', updated_at = NOW() WHERE bot_id = ${botId}`;
+      await sql`UPDATE managed_bots SET admin_suspended = FALSE, updated_at = NOW() WHERE bot_id = ${botId}`;
     },
 
     async deletePermanently(botId: number): Promise<void> {
