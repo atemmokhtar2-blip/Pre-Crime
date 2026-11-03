@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { createNeonRepo, type Sql } from "../../../../lib/db";
+import { createAdminStore } from "../../../../lib/admin/store";
+import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import { createAdminStore } from "../../../../lib/admin/store";
@@ -71,7 +73,19 @@ export async function POST(request: Request) {
 
     try {
       const bot = createTelegramApi(token);
-      const handler = createWebhookHandler({ repo, bot });
+      const ownerIds = (process.env.BOT_OWNER_IDS ?? "")
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isSafeInteger(value) && value > 0);
+      const admin = createAdminPanel({
+        store: createAdminStore(sql),
+        repo,
+        bot,
+        ownerIds,
+        webhookUrl: process.env.APP_URL ? new URL("/api/telegram/webhook", process.env.APP_URL).toString() : undefined,
+        webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+      });
+      const handler = createWebhookHandler({ repo, bot, admin });
       await handler.handleUpdate(update);
 
       await sql`
