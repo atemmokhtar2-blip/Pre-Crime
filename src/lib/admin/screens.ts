@@ -765,3 +765,86 @@ export function screenInfo(title: string, body: string, backTo = "home", ...back
 }
 
 export { PAGE_SIZE };
+
+
+export interface ManagedBotAdminRow {
+  bot_id: number;
+  owner_telegram_id: number;
+  owner_username: string | null;
+  bot_username: string | null;
+  bot_display_name: string;
+  status: string;
+  admin_suspended: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function screenManagedBotList(bots: ManagedBotAdminRow[]): Screen {
+  const keyboard: InlineKeyboardButton[][] = bots.map((b) => [{
+    text: `${b.status === "active" && !b.admin_suspended ? "🟢" : b.status === "deleting" ? "🗑️" : "⏸️"} ${b.bot_username ? "@" + b.bot_username : b.bot_display_name || b.bot_id} · ${b.owner_username ? "@" + b.owner_username : b.owner_telegram_id}`,
+    callback_data: ac("mb_view", b.bot_id),
+  }]);
+  keyboard.push([refresh("managed_bots"), back("home")]);
+  return {
+    text: [
+      "🧩 إدارة النسخ",
+      "━━━━━━━━━━━━━━━",
+      `إجمالي النسخ: ${bots.length}`,
+      `النشطة: ${bots.filter((b) => b.status === "active" && !b.admin_suspended).length}`,
+      `الموقوفة: ${bots.filter((b) => b.admin_suspended || b.status === "suspended_subscription").length}`,
+      `قيد الحذف: ${bots.filter((b) => b.status === "deleting").length}`,
+      "",
+      bots.length ? "اختر نسخة لعرض تفاصيلها وإدارتها:" : "لا توجد نسخ مسجلة حاليًا.",
+    ].join("\\n"),
+    keyboard,
+  };
+}
+
+export function screenManagedBotDetail(b: ManagedBotAdminRow): Screen {
+  const stopped = b.admin_suspended || b.status === "suspended_subscription";
+  const status = b.status === "deleting" ? "🗑️ قيد الحذف" : stopped ? "⏸️ موقوفة إداريًا" : b.status === "active" ? "🟢 نشطة" : b.status === "pending_isolation" ? "🟡 قيد التفعيل" : "🔴 غير نشطة";
+  const keyboard: InlineKeyboardButton[][] = [];
+  if (b.status !== "deleting") {
+    keyboard.push(stopped
+      ? [btn("▶️ إعادة تشغيل النسخة", "mb_resume", b.bot_id)]
+      : [btn("⏸️ إيقاف النسخة", "mb_pause", b.bot_id)]);
+  }
+  keyboard.push([btn("🗑️ حذف نهائي للنسخة", "mb_del", b.bot_id)]);
+  keyboard.push([refresh("mb_view", b.bot_id), back("managed_bots")]);
+  return {
+    text: [
+      "🧩 تفاصيل النسخة",
+      "━━━━━━━━━━━━━━━",
+      `اسم البوت: ${esc(b.bot_display_name || "—")}`,
+      `Username: ${b.bot_username ? "@" + esc(b.bot_username) : "—"}`,
+      `Bot ID: ${b.bot_id}`,
+      `صاحب النسخة: ${b.owner_username ? "@" + esc(b.owner_username) : "—"}`,
+      `Owner Telegram ID: ${b.owner_telegram_id}`,
+      `الحالة: ${status}`,
+      `تاريخ الإنشاء: ${fmtDate(b.created_at)}`,
+      `آخر تحديث: ${fmtDate(b.updated_at)}`,
+      "",
+      b.status === "deleting" ? "⚠️ النسخة قيد الحذف؛ أعد محاولة الحذف لإكمال العملية." : "اختر الإجراء المطلوب من الأزرار بالأسفل.",
+    ].join("\\n"),
+    keyboard,
+  };
+}
+
+export function screenManagedBotDeleteConfirm(b: ManagedBotAdminRow): Screen {
+  return {
+    text: [
+      "⚠️ تأكيد الحذف النهائي",
+      "━━━━━━━━━━━━━━━",
+      `البوت: ${b.bot_username ? "@" + b.bot_username : b.bot_id}`,
+      `Bot ID: ${b.bot_id}`,
+      `صاحب النسخة: ${b.owner_telegram_id}`,
+      "",
+      "سيتم إلغاء Webhook، ثم حذف سجل النسخة ومخطط قاعدة البيانات الخاص بها بكل الجداول والمستخدمين والمجموعات والإعدادات والسجلات.",
+      "⚠️ لا يمكن التراجع عن هذا الإجراء.",
+    ].join("\\n"),
+    keyboard: [
+      [btn("🗑️ نعم، احذف كل البيانات نهائيًا", "mb_del_c", b.bot_id)],
+      [back("mb_view", b.bot_id)],
+    ],
+  };
+}
