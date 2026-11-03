@@ -63,6 +63,7 @@ import {
   screenProtectionMenu,
   screenReport,
   screenSystemMenu,
+  screenSubscriptionChannels,
   screenUserDetail,
   screenUserGroups,
   screenUserList,
@@ -292,7 +293,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     // denied by default, including manually forged callbacks sent to Telegram.
     const tenantAllowedCallback =
       key === "home" || key === "noop" ||
-      /^(users|u_|groups|g_|admins|a_|licenses|l_|bcast|bc_|prot|pe_|analytics|an_|logs|log_)/.test(key);
+      /^(sub_|users|u_|groups|g_|admins|a_|licenses|l_|bcast|bc_|prot|pe_|analytics|an_|logs|log_)/.test(key);
     if (tenantMode && !tenantAllowedCallback) {
       await ack(update.id, "⛔ هذا الأمر غير متاح في النسخ الخاصة.", true);
       await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_control_blocked", key, {});
@@ -309,6 +310,11 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       await ack(update.id, "⛔ غير مصرح لك.", true);
       await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
       await show(chatId, messageId, screenDenied());
+      return true;
+    }
+    if (key.startsWith("sub_") && (!tenantMode || !isOwner(from.id))) {
+      await ack(update.id, "⛔ إدارة قنوات الاشتراك لمالك النسخة فقط.", true);
+      await store.audit(from.id, from.username ?? from.first_name ?? null, "unauthorized_access", `adm:${key}`, {});
       return true;
     }
     if (key === "emerg" || key.startsWith("em_") || key.startsWith("mb_")) {
@@ -335,6 +341,33 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     };
 
     switch (key) {
+      case "sub_channels": {
+        const cfg = await store.getConfig();
+        await ack(update.id);
+        await showScreen(screenSubscriptionChannels(cfg.subscriptionChannels ?? []));
+        return true;
+      }
+      case "sub_add": {
+        await repo.setPending({ chat_id: chatId, group_id: 0, action: "adm_sub_add", context: {} });
+        await ack(update.id);
+        await bot.sendMessage(chatId, "📢 أرسل Username القناة العامة مثل @MyChannel.\\nيجب إضافة البوت المستنسخ مشرفًا في القناة قبل إضافتها.", {
+          reply_markup: { force_reply: true, input_field_placeholder: "@ChannelUsername" },
+        });
+        return true;
+      }
+      case "sub_remove": {
+        const index = numArg(0);
+        const cfg = await store.getConfig();
+        const channels = cfg.subscriptionChannels ?? [];
+        if (index == null || index < 0 || index >= channels.length) { await ack(update.id, "القناة غير موجودة.", true); return true; }
+        const removed = channels[index];
+        cfg.subscriptionChannels = channels.filter((_, i) => i !== index);
+        await store.setConfig(cfg);
+        await recordOp(from.id, actorName, "subscription_channel_removed", removed, {});
+        await ack(update.id, "تم حذف القناة من الاشتراك الإجباري.");
+        await showScreen(screenSubscriptionChannels(cfg.subscriptionChannels));
+        return true;
+      }
       case "mb_list":
       case "mb_page": {
         if (!deps.managedBots) { await ack(update.id, "إدارة النسخ غير مهيأة.", true); return true; }
@@ -1516,8 +1549,13 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       "adm_search_user", "adm_pm", "adm_note", "adm_add_admin",
       "adm_search_license", "adm_linkg", "adm_linku",
       "adm_bc_ids", "adm_bc_text", "adm_bc_edit_keep",
-      "adm_g_msg", "adm_pe_words", "adm_pe_dom",
+      "adm_g_msg", "adm_pe_words", "adm_pe_dom", "adm_sub_add",
     ]);
+    if (pending.action === "adm_sub_add" && (!tenantMode || !from || !isOwner(from.id))) {
+      await repo.clearPending(chatId);
+      await bot.sendMessage(chatId, "⛔ إدارة قنوات الاشتراك متاحة لمالك النسخة فقط.");
+      return true;
+    }
     if (tenantMode && !tenantAllowedPending.has(pending.action)) {
       await repo.clearPending(chatId);
       if (from) await store.audit(from.id, from.username ?? from.first_name ?? null, "tenant_restricted_pending_blocked", pending.action, {});
@@ -1533,6 +1571,41 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     const ctx = pending.context;
 
     switch (pending.action) {
+      case "adm_sub_add": {
+        await repo.clearPending(chatId);
+        const username = input.replace(/^https?:\\/\\/(www\\.)?t\\.me\\//i, "").replace(/^@/, "").replace(/\\/$/, "");
+        if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) {
+          await bot.sendMessage(chatId, "⚠️ أرسل Username صحيحًا لقناة عامة مثل @MyChannel.");
+          return true;
+        }
+        const channel = "@" + username;
+        const cfg = await store.getConfig();
+        if ((cfg.subscriptionChannels ?? []).includes(channel)) {
+          await bot.sendMessage(chatId, "ℹ️ القناة مضافة بالفعل.");
+          await show(chatId, null, screenSubscriptionChannels(cfg.subscriptionChannels ?? []));
+          return true;
+        }
+        try {
+          const chat = await bot.getChat(channel);
+          if (chat.type !== "channel" || !chat.username) throw new Error("not_a_public_channel");
+          const me = await bot.getMe();
+          const botMembership = await bot.getChatMember(chat.id, me.id);
+          if (botMembership.status !== "administrator" && botMembership.status !== "creator") throw new Error("bot_must_be_channel_admin");
+          cfg.subscriptionChannels = [...(cfg.subscriptionChannels ?? []), "@" + chat.username];
+          await store.setConfig(cfg);
+          await recordOp(from.id, actorName, "subscription_channel_added", channel, { chatId: chat.id });
+          await bot.sendMessage(chatId, "✅ تمت إضافة القناة. أصبح الاشتراك فيها إجباريًا.");
+          await show(chatId, null, screenSubscriptionChannels(cfg.subscriptionChannels));
+        } catch (error) {
+          const reason = error instanceof Error && error.message === "bot_must_be_channel_admin"
+            ? "يجب إضافة البوت المستنسخ مشرفًا في القناة أولًا."
+            : error instanceof Error && error.message === "not_a_public_channel"
+              ? "هذا الـ Username لا يشير إلى قناة عامة صالحة."
+              : "تعذر الوصول للقناة. تأكد من الـ Username وأن البوت المستنسخ مشرف فيها.";
+          await bot.sendMessage(chatId, "⚠️ " + reason);
+        }
+        return true;
+      }
       case "adm_search_user": {
         await repo.clearPending(chatId);
         const users = await store.listUsers("search", input);
