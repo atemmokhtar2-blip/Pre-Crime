@@ -345,6 +345,7 @@ export async function POST(request: Request) {
             if (existingTokenBot) {
               await repo.clearPending(ownerId);
               await bot.sendMessage(ownerId, "⛔ فشل التفعيل: توكن هذا البوت مستخدم بالفعل في نسخة مسجلة أو قيد التفعيل. استخدم توكن بوت جديدًا غير مرتبط بأي نسخة.");
+              await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = 'bot_token_already_in_use' WHERE update_id = ${update.update_id}`;
               return Response.json({ ok: true, processed: true, error: "bot_token_already_in_use" });
             }
             const existingOwnerBot = await findLiveManagedBot(sql, ownerId);
