@@ -1,6 +1,8 @@
 import { createDecipheriv, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { createTenantSql, createNeonRepo, type Sql } from "../../../../../../lib/db";
+import { createAdminStore } from "../../../../../../lib/admin/store";
+import { createAdminPanel } from "../../../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../../../lib/telegram-api";
 import { createWebhookHandler } from "../../../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../../../lib/types";
@@ -111,7 +113,27 @@ export async function POST(
     const tenantSql = await createTenantSql(sql, botId);
     const repo = createNeonRepo(tenantSql);
     await repo.ensureSchema();
-    console.info("managed_bot_tenant_schema_ready", { botId });
+
+    const ownerId = Number(record.owner_telegram_id);
+    if (!Number.isSafeInteger(ownerId) || ownerId <= 0) {
+      throw new Error("managed_bot_owner_identity_invalid");
+    }
+
+    // Every tenant gets its own admin tables, users, settings, broadcasts and audit.
+    // The owner is an admin only inside this bot's tenant schema.
+    const adminStore = createAdminStore(tenantSql);
+    await adminStore.ensureReady();
+    const appOrigin = new URL(request.url).origin;
+    const admin = createAdminPanel({
+      store: adminStore,
+      repo,
+      bot,
+      ownerIds: [ownerId],
+      webhookUrl: new URL("/api/telegram/managed/" + botId + "/webhook", appOrigin).toString(),
+      webhookSecret: expectedSecret,
+    });
+
+    console.info("managed_bot_tenant_schema_ready", { botId, ownerId });
 
     stage = "claim_update";
     console.info("managed_bot_update_received", {
@@ -133,8 +155,68 @@ export async function POST(
     }
 
     try {
+      // Enforce the primary channel subscription for private bot usage.
+      // Group moderation remains active even for non-subscribed group members.
+      const actor = update.message?.from ?? update.edited_message?.from ?? update.callback_query?.from;
+      const privateChatId =
+        update.message?.chat.type === "private" ? update.message.chat.id :
+        update.edited_message?.chat.type === "private" ? update.edited_message.chat.id :
+        update.callback_query?.message?.chat.type === "private" ? update.callback_query.message.chat.id :
+        null;
+
+      if (actor && privateChatId != null) {
+        stage = "subscription_gate";
+        const managerToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (!managerToken) throw new Error("primary_bot_token_missing_for_subscription_check");
+        const managerBot = createTelegramApi(managerToken);
+        const membership = await managerBot.getChatMember("@K_J6k", actor.id);
+        const subscribed = ["member", "administrator", "creator"].includes(membership.status);
+
+        if (update.callback_query?.data === "subscription_check" && subscribed) {
+          await bot.answerCallbackQuery(update.callback_query.id, { text: "تم التحقق من اشتراكك بنجاح ✅" });
+          await bot.sendMessage(privateChatId, "✅ تم تفعيل الوصول. أرسل /start لفتح البوت.");
+          await tenantSql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
+          return Response.json({ ok: true, processed: true });
+        }
+
+        if (!subscribed) {
+          const markup = {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "📢 الاشتراك في القناة", url: "https://t.me/K_J6k" }],
+                [{ text: "🔄 تحقق من الاشتراك", callback_data: "subscription_check" }],
+              ],
+            },
+          };
+          if (update.callback_query) {
+            await bot.answerCallbackQuery(update.callback_query.id, {
+              text: "🔒 يجب الاشتراك في قناة Pre Crime أولًا.",
+              show_alert: true,
+            });
+            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك أولًا في قناة Pre Crime ثم اضغط تحقق من الاشتراك.", markup);
+          } else {
+            await bot.sendMessage(privateChatId, "🔒 لاستخدام هذا البوت، اشترك أولًا في قناة Pre Crime ثم اضغط تحقق من الاشتراك.", markup);
+          }
+          await tenantSql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
+          return Response.json({ ok: true, processed: true, subscription_required: true });
+        }
+
+        if (update.callback_query?.data === "subscription_check") {
+          await bot.answerCallbackQuery(update.callback_query.id, { text: "تم التحقق من اشتراكك بنجاح ✅" });
+          await bot.sendMessage(privateChatId, "✅ تم تفعيل الوصول. أرسل /start لفتح البوت.");
+          await tenantSql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
+          return Response.json({ ok: true, processed: true });
+        }
+      }
+
       stage = "update_handler";
-      const handler = createWebhookHandler({ repo, bot, supportOwnerId: Number(record.owner_telegram_id) });
+      const handler = createWebhookHandler({
+        repo,
+        bot,
+        admin,
+        adminStartPanel: true,
+        supportOwnerId: ownerId,
+      });
       await handler.handleUpdate(update);
       await tenantSql`
         UPDATE telegram_updates
