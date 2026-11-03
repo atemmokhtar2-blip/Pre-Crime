@@ -1178,8 +1178,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
       if (ownerId != null) {
         const botUsername = (await bot.getMe()).username ?? "precrime_bot";
         await sendSafe(ownerId,
-          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing.title}»\n\n${removed ? "تمت إزالة PRE CRIME من المجموعة." : "تم سحب صلاحيات المشرف من PRE CRIME."}\nيمكنك إعادة إضافته ومنحه صلاحيات المشرف للتفعيل.`,
-          [[{ text: "➕ تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=true` }],
+          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing?.title ?? chat.title ?? "المجموعة"}»\n\n${removed ? "تمت إزالة PRE CRIME من المجموعة." : "تم سحب صلاحيات المشرف من PRE CRIME."}\nيمكنك إعادة إضافته ومنحه صلاحيات المشرف للتفعيل.`,
+          [[{ text: "➕ تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=activate` }],
            [{ text: "✍️ كتابة السبب", callback_data: encodeCallback("removal_reason", chat.id) }]],
         );
       }
