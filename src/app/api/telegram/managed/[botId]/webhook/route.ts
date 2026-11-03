@@ -13,6 +13,8 @@ import type { TelegramUpdate } from "../../../../../../lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+let managedBotAdminColumnReady = false;
+
 function safeSecretMatch(actual: string | null, expected: string): boolean {
   if (!actual) return false;
   const a = Buffer.from(actual);
@@ -98,6 +100,10 @@ export async function POST(
   let stage = "database_lookup";
   try {
     const sql = neon(databaseUrl) as unknown as Sql;
+    if (!managedBotAdminColumnReady) {
+      await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT false`;
+      managedBotAdminColumnReady = true;
+    }
     const rows = await sql`SELECT encrypted_token, status, owner_telegram_id, admin_suspended FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
     const record = rows[0];
     console.info("managed_bot_db_lookup", { botId, found: Boolean(record), status: record?.status ?? null });
