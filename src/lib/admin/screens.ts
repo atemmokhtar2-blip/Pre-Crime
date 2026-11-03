@@ -54,7 +54,7 @@ export function screenHome(stats: OverviewStats, _recent: AuditRow[], _actorName
       `🟢 نشطة ${stats.activeGroups}   •   🔴 معطلة ${stats.pausedGroups}   •   🚪 غادرها ${stats.leftGroups}`,
       `👑 المديرون ${stats.admins}   •   🔑 التراخيص ${stats.activeLicenses}`,
       `📈 نشاط 24 ساعة ${stats.activity24h}`,
-    ].join("\\n"),
+    ].join("\n"),
     keyboard: [
       [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
       [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
