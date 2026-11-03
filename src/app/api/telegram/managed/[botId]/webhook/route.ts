@@ -144,6 +144,7 @@ export async function POST(
       repo,
       bot,
       ownerIds: [ownerId],
+      tenantMode: true,
       webhookUrl: new URL("/api/telegram/managed/" + botId + "/webhook", appOrigin).toString(),
       webhookSecret: expectedSecret,
     });
