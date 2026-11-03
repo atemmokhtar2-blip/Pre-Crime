@@ -156,6 +156,7 @@ export interface BotApi {
   unbanChatMember(chatId: number, userId: number): Promise<unknown>;
   getWebhookInfo(): Promise<{ url: string; pending_update_count: number; last_error_message?: string; max_connections?: number }>;
   setWebhook(url: string, secretToken?: string): Promise<boolean>;
+  deleteWebhook(dropPendingUpdates?: boolean): Promise<boolean>;
   sendDocument(chatId: number, filename: string, content: string, caption?: string): Promise<unknown>;
   getFile(fileId: string): Promise<{ file_path?: string }>;
   downloadFile(filePath: string): Promise<string>;
