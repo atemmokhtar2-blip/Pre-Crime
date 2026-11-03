@@ -769,12 +769,12 @@ export interface ManagedBotScreenRow {
 export function screenManagedBotList(bots: ManagedBotScreenRow[], page: number): Screen {
   const p = paginate(bots, page);
   const keyboard: InlineKeyboardButton[][] = p.items.map((b) => [
-    btn(\`\${b.admin_suspended ? "⏸️" : b.status === "active" ? "🟢" : "🔴"} \${trunc(b.bot_username ? "@" + b.bot_username : b.bot_display_name || String(b.bot_id), 26)} • \${b.owner_telegram_id}\`, "mb_view", b.bot_id),
+    btn(`${b.admin_suspended ? "⏸️" : b.status === "active" ? "🟢" : "🔴"} ${trunc(b.bot_username ? "@" + b.bot_username : b.bot_display_name || String(b.bot_id), 26)} • ${b.owner_telegram_id}`, "mb_view", b.bot_id),
   ]);
   if (p.pages > 1) keyboard.push(pagerRow("mb_page", p.page, p.pages));
   keyboard.push([refresh("mb_list", 0)], [back("home")]);
   return {
-    text: \`🤖 إدارة النسخ الخاصة (\${p.total})\\n━━━━━━━━━━━━━━━\\nاختر نسخة لعرض تفاصيلها وإدارتها.\\n\\n🟢 تعمل • ⏸️ موقوفة إداريًا • 🔴 غير نشطة\`,
+    text: `🤖 إدارة النسخ الخاصة (${p.total})\n━━━━━━━━━━━━━━━\nاختر نسخة لعرض تفاصيلها وإدارتها.\n\n🟢 تعمل • ⏸️ موقوفة إداريًا • 🔴 غير نشطة`,
     keyboard,
   };
 }
@@ -785,19 +785,19 @@ export function screenManagedBotDetail(bot: ManagedBotScreenRow): Screen {
     text: [
       "🤖 تفاصيل النسخة",
       "━━━━━━━━━━━━━━━",
-      \`اسم البوت: \${esc(bot.bot_display_name || "—")}\`,
-      \`Username: \${bot.bot_username ? "@" + esc(bot.bot_username) : "—"}\`,
-      \`Bot ID: \${bot.bot_id}\`,
-      \`المالك: \${bot.owner_username ? "@" + esc(bot.owner_username) : "—"}\`,
-      \`Owner Telegram ID: \${bot.owner_telegram_id}\`,
-      \`الحالة: \${status}\`,
-      \`تاريخ الإنشاء: \${fmtDate(bot.created_at)}\`,
+      `اسم البوت: ${esc(bot.bot_display_name || "—")}`,
+      `Username: ${bot.bot_username ? "@" + esc(bot.bot_username) : "—"}`,
+      `Bot ID: ${bot.bot_id}`,
+      `المالك: ${bot.owner_username ? "@" + esc(bot.owner_username) : "—"}`,
+      `Owner Telegram ID: ${bot.owner_telegram_id}`,
+      `الحالة: ${status}`,
+      `تاريخ الإنشاء: ${fmtDate(bot.created_at)}`,
       "",
       "الإجراءات المتاحة:",
       "• إيقاف مؤقت يمنع تشغيل الـWebhook.",
       "• إعادة التشغيل تعيد ضبط الـWebhook بعد التحقق من هوية البوت.",
       "• الحذف النهائي يمسح كل بيانات مساحة النسخة.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard: [
       bot.admin_suspended
         ? [btn("▶️ إعادة تشغيل النسخة", "mb_resume", bot.bot_id)]
@@ -813,9 +813,9 @@ export function screenManagedBotDeleteConfirm(bot: ManagedBotScreenRow): Screen 
     text: [
       "🚨 تأكيد الحذف النهائي",
       "━━━━━━━━━━━━━━━",
-      \`البوت: \${bot.bot_username ? "@" + esc(bot.bot_username) : bot.bot_id}\`,
-      \`Bot ID: \${bot.bot_id}\`,
-      \`المالك: \${bot.owner_telegram_id}\`,
+      `البوت: ${bot.bot_username ? "@" + esc(bot.bot_username) : bot.bot_id}`,
+      `Bot ID: ${bot.bot_id}`,
+      `المالك: ${bot.owner_telegram_id}`,
       "",
       "سيتم تنفيذ الآتي نهائيًا:",
       "1) إيقاف Webhook وحذف التحديثات المعلقة.",
@@ -823,7 +823,7 @@ export function screenManagedBotDeleteConfirm(bot: ManagedBotScreenRow): Screen 
       "3) حذف سجل النسخة والتوكن المشفر من managed_bots.",
       "",
       "⚠️ لا يمكن التراجع عن هذا الإجراء أو استعادة البيانات بعده.",
-    ].join("\\n"),
+    ].join("\n"),
     keyboard: [
       [btn("🗑️ نعم، احذف كل بيانات النسخة", "mb_delete_confirm", bot.bot_id)],
       [btn("❌ إلغاء والعودة", "mb_view", bot.bot_id)],
