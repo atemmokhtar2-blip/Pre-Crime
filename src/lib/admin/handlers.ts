@@ -255,25 +255,6 @@ export function createAdminPanel(deps: AdminPanelDeps) {
     return true;
   }
 
-  async function buildHome(from: TelegramFrom): Promise<Screen> {
-    const [users, groups, activeGroups, pausedGroups, leftGroups, admins, activeLicenses, activity24h, recent] = await Promise.all([
-      store.countUsers(),
-      store.countGroups(),
-      store.countGroups("active"),
-      store.countGroups("paused"),
-      store.countGroups("left"),
-      store.listAdmins("active"),
-      store.countLicenses("active"),
-      store.activity24h(),
-      store.listGlobalAudit(),
-    ]);
-    return screenHome(
-      { users, groups, activeGroups, pausedGroups, leftGroups, admins: admins.length + ownerIds.length, activeLicenses, activity24h },
-      recent,
-      from.first_name ?? from.username ?? "أدمن",
-    );
-  }
-
   // ---------- callback router ----------
 
   async function handleCallback(update: NonNullable<TelegramUpdate["callback_query"]>): Promise<boolean> {
@@ -347,9 +328,9 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         return true;
       }
       case "u_search":
-        await repo.setPending({ chat_id: chatId, group_id: 0, action: "adm_search_user", context: {} });
+        await repo.setPending({ chat_id: chatId, group_id: 0, action: "adm_search_user", context: { panelMessageId: messageId } });
         await ack(update.id);
-        await bot.sendMessage(chatId, "🔎 أرسل الاسم أو Username أو Telegram ID للبحث:", { reply_markup: { force_reply: true, input_field_placeholder: "الاسم / @username / ID" } });
+        await show(chatId, messageId, { text: "🔎 البحث عن مستخدم\\n━━━━━━━━━━━━━━━\\nأرسل الاسم أو Username أو Telegram ID:", keyboard: [] });
         return true;
       case "u_view": {
         const id = numArg(0);
@@ -1466,7 +1447,8 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       case "adm_search_user": {
         await repo.clearPending(chatId);
         const users = await store.listUsers("search", input);
-        await show(chatId, null, screenUserList(users, "search", 0));
+        const panelMessageId = Number(ctx.panelMessageId);
+        await show(chatId, Number.isSafeInteger(panelMessageId) ? panelMessageId : null, screenUserList(users, "search", 0));
         return true;
       }
       case "adm_search_group": {
