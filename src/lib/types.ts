@@ -122,7 +122,8 @@ export interface ModerationRow {
 // ---- Injected boundaries (dependency injection for testability) ----
 
 export interface BotApi {
-  getMe(): Promise<{ id: number; username?: string; first_name?: string }>;
+  getMe(): Promise<{ id: number; username?: string; first_name?: string; can_manage_bots?: boolean }>;
+  getManagedBotToken(userId: number): Promise<string>;
   sendMessage(
     chatId: number,
     text: string,
@@ -273,6 +274,7 @@ export interface TelegramMessage {
 
 export interface TelegramUpdate {
   update_id: number;
+  managed_bot?: { user: TelegramFrom; bot: { id: number; is_bot: true; username?: string; first_name?: string } };
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
   my_chat_member?: {
