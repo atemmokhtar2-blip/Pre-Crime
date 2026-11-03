@@ -800,8 +800,10 @@ export function screenManagedBotDetail(bot: ManagedBotScreenRow): Screen {
     ].join("\n"),
     keyboard: [
       bot.admin_suspended
-        ? [btn("▶️ إعادة تشغيل النسخة", "mb_resume", bot.bot_id)]
-        : [btn("⏸️ إيقاف النسخة", "mb_suspend", bot.bot_id)],
+        ? [btn("▶️ رفع الإيقاف الإداري", "mb_resume", bot.bot_id)]
+        : bot.status === "active"
+          ? [btn("⏸️ إيقاف النسخة", "mb_suspend", bot.bot_id)]
+          : [],
       [btn("🗑️ حذف النسخة نهائيًا", "mb_delete_ask", bot.bot_id)],
       [refresh("mb_view", bot.bot_id), back("mb_list", 0)],
     ],
