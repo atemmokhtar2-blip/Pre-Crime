@@ -579,7 +579,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const me = await bot.getMe();
     const chatId = message.chat.id;
     if (message.chat.type === "private") {
-      const startPayload = (message.text ?? "").trim().match(/^\/start(?:@\\w+)?\\s+panel_(-?\\d+)$/i);
+      const startPayload = (message.text ?? "").trim().match(/^\/start(?:@\w+)?\s+panel_(-?\d+)$/i);
       if (startPayload && message.from?.id) {
         const gid = Number(startPayload[1]);
         const access = Number.isSafeInteger(gid) ? await authorize(gid, message.from.id) : null;
@@ -1167,17 +1167,19 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const added = (newStatus === "member" || newStatus === "administrator") && (oldStatus === "left" || oldStatus === "kicked" || oldStatus === "member");
     const promoted = newStatus === "administrator" && oldStatus === "member";
     const removed = newStatus === "left" || newStatus === "kicked";
+    const permissionsRevoked = oldStatus === "administrator" && (newStatus === "member" || newStatus === "restricted");
 
-    if (removed) {
+    if (removed || permissionsRevoked) {
       await ensureGroup(chat.id, chat.title, chat.type);
       const existing = await repo.getGroup(chat.id);
-      if (existing) await repo.upsertGroup({ ...existing, status: "left" });
-      await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", "bot_removed", { oldStatus, newStatus });
+      if (existing) await repo.upsertGroup({ ...existing, status: removed ? "left" : "paused" });
+      await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", removed ? "bot_removed" : "bot_permissions_revoked", { oldStatus, newStatus });
       const ownerId = existing?.owner_user_id;
       if (ownerId != null) {
+        const botUsername = (await bot.getMe()).username ?? "precrime_bot";
         await sendSafe(ownerId,
-          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing.title}»\n\nتمت إزالة PRE CRIME من المجموعة أو سحب صلاحياته.\nيمكنك إضافته مرة أخرى لإعادة التفعيل.`,
-          [[{ text: "➕ تفعيل البوت", url: `https://t.me/${(await bot.getMe()).username ?? "precrime_bot"}?startgroup=true` }],
+          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing.title}»\n\n${removed ? "تمت إزالة PRE CRIME من المجموعة." : "تم سحب صلاحيات المشرف من PRE CRIME."}\nيمكنك إعادة إضافته ومنحه صلاحيات المشرف للتفعيل.`,
+          [[{ text: "➕ تفعيل البوت", url: `https://t.me/${botUsername}?startgroup=true` }],
            [{ text: "✍️ كتابة السبب", callback_data: encodeCallback("removal_reason", chat.id) }]],
         );
       }
