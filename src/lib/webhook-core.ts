@@ -366,8 +366,13 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
     // New members welcome
     if (message.new_chat_members?.length) {
+      // Telegram also sends a service message when this bot itself joins.
+      // Never welcome, track, or notify about our own bot account as a member.
+      const self = await bot.getMe();
+      const actualMembers = message.new_chat_members.filter((member) => member.id !== self.id);
+      if (!actualMembers.length) return;
       const settings = await repo.getSettings(gid);
-      for (const member of message.new_chat_members) {
+      for (const member of actualMembers) {
         const label = memberLabel(member.first_name || null, member.username || null, member.id);
         await repo.upsertMember({
           chat_id: gid,
@@ -1195,7 +1200,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
       // Group notice: the only group-side action opens the private bot, never a group panel.
       const botUsername = (await bot.getMe()).username ?? "precrime_bot";
-      await sendGroupNotice(chat.id, "• شكراً لك تم تفعيل البوت", [
+      await sendSafe(chat.id, "〔 • شكراً لك تم تفعيل البوت 〕", [
         [{ text: "⚙️ لوحة التحكم", url: `https://t.me/${botUsername}?start=panel_${chat.id}` }],
       ]);
 
