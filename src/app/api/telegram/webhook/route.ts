@@ -38,6 +38,7 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
 }
 
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
+  await ensureManagedBotsSchema(sql);
   const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
   if (!pending.length) return;
   const membership = await managerBot.getChatMember(-1004463431688, ownerId).catch(() => null);
@@ -107,11 +108,6 @@ export async function POST(request: Request) {
     const repo = createNeonRepo(sql);
 
     await repo.ensureSchema();
-    // Bootstrap the central managed-bot registry on every webhook, not only
-    // when Telegram first emits a managed_bot update. Otherwise /start and
-    // ordinary messages fail on fresh production databases.
-    await ensureManagedBotsSchema(sql);
-
     // Idempotent update claim. Failed deliveries may be retried; successful ones
     // return early without duplicating side effects.
     const claimed = await sql`
@@ -131,79 +127,93 @@ export async function POST(request: Request) {
     try {
       const bot = createTelegramApi(token);
       if (update.managed_bot) {
-        const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? "";
-        if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) {
-          throw new Error("managed_bot_encryption_key_missing_or_invalid");
-        }
-        const managed = update.managed_bot;
-        const childToken = await bot.getManagedBotToken(managed.bot.id);
-        const iv = randomBytes(12);
-        const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
-        const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
-        const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
-        const membership = await bot.getChatMember(-1004463431688, managed.user.id).catch(() => null);
-        const subscribed = Boolean(membership && ["member", "administrator", "creator"].includes(membership.status));
-        await sql`
-          CREATE TABLE IF NOT EXISTS managed_bots (
-            bot_id BIGINT PRIMARY KEY,
-            owner_telegram_id BIGINT NOT NULL,
-            owner_username TEXT,
-            bot_username TEXT,
-            bot_display_name TEXT NOT NULL DEFAULT '',
-            encrypted_token TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending_isolation'
-              CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          )
-        `;
-        await sql`
-          INSERT INTO managed_bots
-            (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
-          VALUES
-            (${managed.bot.id}, ${managed.user.id}, ${managed.user.username ?? null},
-             ${managed.bot.username ?? null}, ${managed.bot.first_name ?? ""}, ${tokenCiphertext},
-             ${subscribed ? "pending_isolation" : "suspended_subscription"})
-          ON CONFLICT (bot_id) DO UPDATE SET
-            owner_telegram_id = EXCLUDED.owner_telegram_id,
-            owner_username = EXCLUDED.owner_username,
-            bot_username = EXCLUDED.bot_username,
-            bot_display_name = EXCLUDED.bot_display_name,
-            encrypted_token = EXCLUDED.encrypted_token,
-            status = EXCLUDED.status,
-            updated_at = NOW()
-        `;
-        if (subscribed) {
-          const childBot = createTelegramApi(childToken);
-          const childIdentity = await childBot.getMe();
-          if (childIdentity.id !== managed.bot.id) throw new Error("managed_bot_identity_mismatch");
-
-          // Provision a private schema in the same Neon database, then attach
-          // the child token to its own Telegram webhook endpoint.
-          const tenantSql = await createTenantSql(sql, managed.bot.id);
-          const tenantRepo = createNeonRepo(tenantSql);
-          await tenantRepo.ensureSchema();
-
-          const appOrigin = process.env.APP_URL
-            ? new URL(process.env.APP_URL).origin
-            : process.env.VERCEL_URL
-              ? "https://" + process.env.VERCEL_URL
-              : new URL(request.url).origin;
-          const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
-          const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-          if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
-          await childBot.setWebhook(webhookUrl, webhookSecret);
-          await sql`
-            UPDATE managed_bots SET status = 'active', updated_at = NOW()
-            WHERE bot_id = ${managed.bot.id}
-          `;
-        }
-
+        // Provisioning a clone is a sidecar operation. Never let its failure
+        // stop ordinary messages and moderation handled by the primary bot.
         try {
-          await bot.sendMessage(managed.user.id, subscribed
-            ? "🎉 تم تشغيل نسختك الخاصة بنجاح! افتح البوت وابدأ بـ /start. بيانات مجموعاتك محفوظة في مساحة مستقلة داخل قاعدة Neon."
-            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ اشترك في القناة ثم تواصل مع الدعم لاستكمال التفعيل.");
-        } catch { /* the owner may not have opened the manager bot */ }
+          const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? "";
+          if (!/^[a-f0-9]{64}$/i.test(encryptionKey)) {
+            throw new Error("managed_bot_encryption_key_missing_or_invalid");
+          }
+          const managed = update.managed_bot;
+          const childToken = await bot.getManagedBotToken(managed.bot.id);
+          const iv = randomBytes(12);
+          const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
+          const encrypted = Buffer.concat([cipher.update(childToken, "utf8"), cipher.final()]);
+          const tokenCiphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
+          const membership = await bot.getChatMember(-1004463431688, managed.user.id).catch(() => null);
+          const subscribed = Boolean(membership && ["member", "administrator", "creator"].includes(membership.status));
+          await sql`
+            CREATE TABLE IF NOT EXISTS managed_bots (
+              bot_id BIGINT PRIMARY KEY,
+              owner_telegram_id BIGINT NOT NULL,
+              owner_username TEXT,
+              bot_username TEXT,
+              bot_display_name TEXT NOT NULL DEFAULT '',
+              encrypted_token TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'pending_isolation'
+                CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting')),
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+          `;
+          await sql`
+            INSERT INTO managed_bots
+              (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
+            VALUES
+              (${managed.bot.id}, ${managed.user.id}, ${managed.user.username ?? null},
+               ${managed.bot.username ?? null}, ${managed.bot.first_name ?? ""}, ${tokenCiphertext},
+               ${subscribed ? "pending_isolation" : "suspended_subscription"})
+            ON CONFLICT (bot_id) DO UPDATE SET
+              owner_telegram_id = EXCLUDED.owner_telegram_id,
+              owner_username = EXCLUDED.owner_username,
+              bot_username = EXCLUDED.bot_username,
+              bot_display_name = EXCLUDED.bot_display_name,
+              encrypted_token = EXCLUDED.encrypted_token,
+              status = EXCLUDED.status,
+              updated_at = NOW()
+          `;
+          if (subscribed) {
+            const childBot = createTelegramApi(childToken);
+            const childIdentity = await childBot.getMe();
+            if (childIdentity.id !== managed.bot.id) throw new Error("managed_bot_identity_mismatch");
+  
+            // Provision a private schema in the same Neon database, then attach
+            // the child token to its own Telegram webhook endpoint.
+            const tenantSql = await createTenantSql(sql, managed.bot.id);
+            const tenantRepo = createNeonRepo(tenantSql);
+            await tenantRepo.ensureSchema();
+  
+            const appOrigin = process.env.APP_URL
+              ? new URL(process.env.APP_URL).origin
+              : process.env.VERCEL_URL
+                ? "https://" + process.env.VERCEL_URL
+                : new URL(request.url).origin;
+            const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
+            const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+            if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
+            await childBot.setWebhook(webhookUrl, webhookSecret);
+            await sql`
+              UPDATE managed_bots SET status = 'active', updated_at = NOW()
+              WHERE bot_id = ${managed.bot.id}
+            `;
+          }
+  
+          try {
+            await bot.sendMessage(managed.user.id, subscribed
+              ? "🎉 تم تشغيل نسختك الخاصة بنجاح! افتح البوت وابدأ بـ /start. بيانات مجموعاتك محفوظة في مساحة مستقلة داخل قاعدة Neon."
+              : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ اشترك في القناة ثم تواصل مع الدعم لاستكمال التفعيل.");
+          } catch { /* the owner may not have opened the manager bot */ }
+        
+        } catch (error) {
+          console.error("managed_bot_provisioning_failed", {
+            botId: update.managed_bot.bot.id,
+            ownerId: update.managed_bot.user.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          try {
+            await bot.sendMessage(update.managed_bot.user.id, "⚠️ تعذر تجهيز النسخة الآن، لكن البوت الأساسي ما زال يعمل. حاول مرة أخرى لاحقًا أو تواصل مع الدعم.");
+          } catch { /* owner may not have opened the primary bot */ }
+        }
       }
       if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
         const appOrigin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : new URL(request.url).origin;
