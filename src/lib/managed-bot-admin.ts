@@ -85,7 +85,10 @@ export function createManagedBotAdmin(sql: Sql, options: { appOrigin: string; we
     async resume(botId: number): Promise<void> {
       const record = await getRecord(botId);
       if (!record) throw new Error("managed_bot_not_found");
-      if (String(record.status) === "deleting") throw new Error("managed_bot_deletion_in_progress");
+      if (String(record.status) !== "active") {
+        await sql`UPDATE managed_bots SET admin_suspended = FALSE, updated_at = NOW() WHERE bot_id = ${botId}`;
+        return; // Subscription/provisioning states remain blocked by the webhook route.
+      }
       const bot = childBot(record);
       const identity = await bot.getMe();
       if (identity.id !== botId) throw new Error("managed_bot_identity_mismatch");
