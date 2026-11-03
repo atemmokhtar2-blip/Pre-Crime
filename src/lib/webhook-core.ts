@@ -579,12 +579,24 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const me = await bot.getMe();
     const chatId = message.chat.id;
     if (message.chat.type === "private") {
+      const startPayload = (message.text ?? "").trim().match(/^\/start(?:@\\w+)?\\s+panel_(-?\\d+)$/i);
+      if (startPayload && message.from?.id) {
+        const gid = Number(startPayload[1]);
+        const access = Number.isSafeInteger(gid) ? await authorize(gid, message.from.id) : null;
+        if (!access) {
+          await sendSafe(chatId, "⛔ لا تملك صلاحية فتح لوحة تحكم هذه المجموعة. يجب أن تكون مشرفًا مخولًا بها.");
+          return;
+        }
+        const group = await repo.getGroup(gid);
+        await sendRichScreen(chatId, screenPanel(group?.title ?? "المجموعة", gid));
+        return;
+      }
       const home = screenHome(me.username ?? "precrime_bot");
       const keyboard: InlineKeyboardButton[][] = [...home.keyboard];
       if (message.from?.id) {
         const owned = await repo.listOwnedGroups(message.from.id);
         for (const g of owned) {
-          keyboard.push([{ text: `🛡️ لوحة تحكم: ${g.title}`, callback_data: encodeCallback("panel", g.chat_id) }]);
+          if (g.status !== "left") keyboard.push([{ text: `🛡️ لوحة تحكم: ${g.title}`, callback_data: encodeCallback("panel", g.chat_id) }]);
         }
       }
       await sendRichScreen(chatId, { ...home, keyboard });
@@ -631,6 +643,28 @@ export function createWebhookHandler(deps: WebhookDeps) {
       actorId,
       chatType: chat.type,
     });
+
+    // Group management is private-chat only. Group messages never expose a usable panel.
+    if (chatIsGroup && section !== "check" && section !== "guide" && section !== "home") {
+      await ack(update.id, "افتح لوحة التحكم من الخاص فقط.", true);
+      return;
+    }
+
+    if (section === "removal_reason") {
+      if (chat.type !== "private" || gid == null) {
+        await ack(update.id, "هذا الإجراء متاح من الخاص فقط.", true);
+        return;
+      }
+      const group = await repo.getGroup(gid);
+      if (!group || group.owner_user_id !== actorId) {
+        await ack(update.id, "هذا الطلب مخصص لصاحب المجموعة الذي أضاف البوت.", true);
+        return;
+      }
+      await repo.setPending({ chat_id: chatId, group_id: gid, action: "bot_removed_reason", context: { ownerId: actorId } });
+      await sendSafe(chatId, "• اوكـي تفضـل بكتابة السبب او المشكلة", undefined);
+      await ack(update.id, "اكتب السبب في رسالة منفصلة.");
+      return;
+    }
 
     // Non-group sections
     if (section === "home") {
@@ -1137,8 +1171,16 @@ export function createWebhookHandler(deps: WebhookDeps) {
     if (removed) {
       await ensureGroup(chat.id, chat.title, chat.type);
       const existing = await repo.getGroup(chat.id);
-      await repo.upsertGroup({ ...(existing as GroupRow), status: "left" });
-      await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", "bot_removed", {});
+      if (existing) await repo.upsertGroup({ ...existing, status: "left" });
+      await repo.addAudit(chat.id, my.from?.id ?? null, my.from?.username ?? my.from?.first_name ?? null, "settings_changed", "bot_removed", { oldStatus, newStatus });
+      const ownerId = existing?.owner_user_id;
+      if (ownerId != null) {
+        await sendSafe(ownerId,
+          `⚠️ تم تعطيل صلاحياتي في مجموعة «${existing.title}»\n\nتمت إزالة PRE CRIME من المجموعة أو سحب صلاحياته.\nيمكنك إضافته مرة أخرى لإعادة التفعيل.`,
+          [[{ text: "➕ تفعيل البوت", url: `https://t.me/${(await bot.getMe()).username ?? "precrime_bot"}?startgroup=true` }],
+           [{ text: "✍️ كتابة السبب", callback_data: encodeCallback("removal_reason", chat.id) }]],
+        );
+      }
       return;
     }
 
@@ -1147,20 +1189,18 @@ export function createWebhookHandler(deps: WebhookDeps) {
       await ensureGroup(chat.id, chat.title, chat.type, adder?.id);
       await repo.addAudit(chat.id, adder?.id ?? null, adder?.username ?? adder?.first_name ?? null, "member_joined", "PRE CRIME", { promoted });
 
-      // Group greeting
-      await sendGroupNotice(chat.id, `أهلاً بأعضاء مجموعة ${chat.title ?? ""} 👋\n\nأنا PRE CRIME، مساعدكم لإدارة وحماية المجموعة 🤖\nتمت إضافتي بنجاح. ارفعوني مشرفًا وفعّلوا صلاحيات حذف الرسائل وحظر الأعضاء ودعوة المستخدمين، ثم افتحوا لوحة التحكم من الخاص.`, [
-        [{ text: "🔎 فحص جاهزية الحماية", callback_data: encodeCallback("check", chat.id) }],
+      // Group notice: the only group-side action opens the private bot, never a group panel.
+      const botUsername = (await bot.getMe()).username ?? "precrime_bot";
+      await sendGroupNotice(chat.id, "• شكراً لك تم تفعيل البوت", [
+        [{ text: "⚙️ لوحة التحكم", url: `https://t.me/${botUsername}?start=panel_${chat.id}` }],
       ]);
 
-      // Private confirmation + full control panel to the person who added/promoted the bot.
       if (adder && !adder.is_bot) {
-        await sendSafe(adder.id, `✅ تمت إضافة PRE CRIME إلى مجموعتك «${chat.title ?? ""}» بنجاح! 🛡️\n\nلحماية المجموعة بشكل كامل، ارفع البوت إلى مشرف وامنحه الصلاحيات المطلوبة.\n\n⬇️ لوحة التحكم تظهر بالأسفل.`, [
-          [{ text: "📘 شرح تفعيل الحماية", callback_data: encodeCallback("guide") }],
-        ]);
-        // Make sure the owner id is recorded so /start can later re-open the panel.
         await repo.upsertGroup({ chat_id: chat.id, title: chat.title ?? "مجموعة", username: null, chat_type: chat.type, status: "active", timezone: "UTC", added_at: new Date().toISOString(), owner_user_id: adder.id });
-        const panel = screenPanel(chat.title ?? "المجموعة", chat.id);
-        await sendSafe(adder.id, panel.text, panel.keyboard);
+        await sendSafe(adder.id, `✅ شكراً لك، تم تفعيل PRE CRIME في مجموعة «${chat.title ?? ""}».`, [
+          [{ text: "⚙️ فتح لوحة التحكم", url: `https://t.me/${botUsername}?start=panel_${chat.id}` }],
+          [{ text: "📘 شرح التفعيل", callback_data: encodeCallback("guide") }],
+        ]);
       }
       return;
     }
@@ -1205,6 +1245,15 @@ export function createWebhookHandler(deps: WebhookDeps) {
     const pending = await repo.getPending(chatId);
     if (!pending) return false;
     const gid = pending.group_id;
+    if (pending.action === "bot_removed_reason") {
+      await repo.clearPending(chatId);
+      const group = await repo.getGroup(gid);
+      const sender = from?.username ? `@${from.username}` : (from?.first_name ?? String(chatId));
+      await sendSafe(7631249810,
+        `📩 سبب إزالة PRE CRIME من مجموعة\n\n🏷️ المجموعة: ${group?.title ?? "غير معروفة"}\n🆔 Group ID: ${gid}\n👤 صاحب المجموعة: ${sender}\n📝 السبب:\n${text.trim()}`);
+      await sendSafe(chatId, "✅ تم إرسال السبب للإدارة، شكرًا لمساعدتك في تحسين PRE CRIME.");
+      return true;
+    }
     const access = await authorize(gid, from?.id);
     const pendingAction = pending.action;
     const memberAction = String(pending.context.action ?? "");
