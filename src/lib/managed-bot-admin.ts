@@ -101,7 +101,7 @@ export function createManagedBotAdmin(sql: Sql, options: { appOrigin: string; we
       if (!record) throw new Error("managed_bot_not_found");
       // Disable delivery before destructive work. A leftover row in deleting state
       // remains blocked if a later database operation fails and can be retried.
-      await sql`UPDATE managed_bots SET admin_suspended = TRUE, status = 'deleting', updated_at = NOW() WHERE bot_id = ${botId}`;
+      await sql`UPDATE managed_bots SET admin_suspended = TRUE, updated_at = NOW() WHERE bot_id = ${botId}`;
       try { await childBot(record).deleteWebhook(true); }
       catch (error) { console.warn("managed_bot_delete_webhook_failed", { botId, error: error instanceof Error ? error.message : String(error) }); }
       const schema = "tenant_" + botId;
@@ -109,7 +109,7 @@ export function createManagedBotAdmin(sql: Sql, options: { appOrigin: string; we
       const statement = ['DROP SCHEMA IF EXISTS "' + schema + '" CASCADE'] as unknown as TemplateStringsArray;
       Object.defineProperty(statement, "raw", { value: ['DROP SCHEMA IF EXISTS "' + schema + '" CASCADE'] });
       await sql(statement);
-      await sql`DELETE FROM managed_bots WHERE bot_id = ${botId} AND status = 'deleting'`;
+      await sql`DELETE FROM managed_bots WHERE bot_id = ${botId} AND admin_suspended = TRUE`;
     },
   };
 }
