@@ -98,10 +98,11 @@ export async function POST(
   let stage = "database_lookup";
   try {
     const sql = neon(databaseUrl) as unknown as Sql;
-    const rows = await sql`SELECT encrypted_token, status, owner_telegram_id FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+    await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
+    const rows = await sql`SELECT encrypted_token, status, owner_telegram_id, admin_suspended FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
     const record = rows[0];
     console.info("managed_bot_db_lookup", { botId, found: Boolean(record), status: record?.status ?? null });
-    if (!record || record.status !== "active") {
+    if (!record || record.status !== "active" || record.admin_suspended === true) {
       console.error("managed_bot_inactive_or_missing", { botId, found: Boolean(record), status: record?.status ?? null });
       return Response.json({ ok: false, error: "managed_bot_not_active" }, { status: 403 });
     }
