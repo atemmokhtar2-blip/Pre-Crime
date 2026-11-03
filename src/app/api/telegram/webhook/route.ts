@@ -215,9 +215,17 @@ export async function POST(request: Request) {
           } catch { /* owner may not have opened the primary bot */ }
         }
       }
-      if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
+      if (update.message?.chat.type === 'private' && update.message.from && /^\\/start(?:@\\w+)?(?:\\s|$)/i.test((update.message.text ?? '').trim())) {
         const appOrigin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : new URL(request.url).origin;
-        await activatePendingManagedBots(sql, bot, update.message.from.id, appOrigin);
+        // Clone reconciliation is deliberately best-effort and isolated.
+        try {
+          await activatePendingManagedBots(sql, bot, update.message.from.id, appOrigin);
+        } catch (error) {
+          console.error("managed_bot_reconcile_failed", {
+            ownerId: update.message.from.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       const ownerIds = (process.env.BOT_OWNER_IDS ?? "")
         .split(",")
