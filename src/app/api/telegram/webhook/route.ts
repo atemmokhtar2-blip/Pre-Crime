@@ -363,7 +363,7 @@ export async function POST(request: Request) {
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             const webhookUrl = new URL("/api/telegram/managed/" + identity.id + "/webhook", appOrigin).toString();
-            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, managed.bot.id));
+            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, identity.id));
             const info = await childBot.getWebhookInfo();
             if (info.url !== webhookUrl || info.last_error_message) throw new Error("child_webhook_verification_failed");
             await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id} AND owner_telegram_id = ${ownerId}`;
