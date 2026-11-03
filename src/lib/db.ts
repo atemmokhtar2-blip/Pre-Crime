@@ -12,7 +12,7 @@ import type {
 // Loose structural type for the Neon tagged-template query helper. We only rely
 // on its tagged-template call shape and treat every result as a row array, which
 // sidesteps Neon's generic FullResults overload resolution during type-checking.
-export type Sql = (query: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>;
+export type Sql = ((query: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>) & { tenantSchema?: string };
 
 function parseJson<T>(value: unknown, fallback: T): T {
   if (value == null) return fallback;
@@ -154,7 +154,7 @@ export async function createTenantSql(sql: Sql, botId: number): Promise<Sql> {
   const tables = "groups|group_members|group_settings|telegram_updates|moderation_actions|warnings|audit_events|pending_actions|telegram_message_events|bot_users|bot_admins|licenses|broadcasts|system_settings";
   const pattern = new RegExp("\\b(FROM|JOIN|INTO|UPDATE|ON)\\s+(" + tables + ")\\b", "gi");
   const createPattern = new RegExp("\\bTABLE\\s+IF\\s+NOT\\s+EXISTS\\s+(" + tables + ")\\b", "gi");
-  return ((strings: TemplateStringsArray, ...values: unknown[]) => {
+  const tenantSql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
     const rewrite = (part: string) => part
       .replace(pattern, (_match, keyword: string, table: string) => keyword + ' "' + schema + '".' + table)
       .replace(createPattern, (_match, table: string) => 'TABLE IF NOT EXISTS "' + schema + '".' + table)
@@ -163,6 +163,8 @@ export async function createTenantSql(sql: Sql, botId: number): Promise<Sql> {
     Object.defineProperty(cooked, "raw", { value: Array.from(strings.raw, rewrite) });
     return sql(cooked, ...values);
   }) as Sql;
+  tenantSql.tenantSchema = schema;
+  return tenantSql;
 }
 
 export function createNeonRepo(sql: Sql): PreCrimeRepo {
