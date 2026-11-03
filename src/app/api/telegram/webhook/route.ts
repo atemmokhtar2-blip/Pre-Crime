@@ -1,6 +1,6 @@
-import { createCipheriv, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { createNeonRepo, type Sql } from "../../../../lib/db";
+import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
@@ -10,6 +10,44 @@ import type { TelegramUpdate } from "../../../../lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function decryptManagedBotToken(payload: string): string {
+  const keyHex = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY ?? '';
+  if (!/^[a-f0-9]{64}$/i.test(keyHex)) throw new Error('managed_bot_encryption_key_missing_or_invalid');
+  const packed = Buffer.from(payload, 'base64');
+  if (packed.length < 29) throw new Error('managed_bot_token_payload_invalid');
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(keyHex, 'hex'), packed.subarray(0, 12));
+  decipher.setAuthTag(packed.subarray(12, 28));
+  return Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]).toString('utf8');
+}
+
+async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
+  const pending = await sql`SELECT bot_id, encrypted_token FROM managed_bots WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription') ORDER BY created_at ASC`;
+  if (!pending.length) return;
+  const membership = await managerBot.getChatMember(-1004463431688, ownerId).catch(() => null);
+  const subscribed = Boolean(membership && ['member', 'administrator', 'creator'].includes(membership.status));
+  if (!subscribed) {
+    await sql`UPDATE managed_bots SET status = 'suspended_subscription', updated_at = NOW() WHERE owner_telegram_id = ${ownerId} AND status IN ('pending_isolation','suspended_subscription')`;
+    return;
+  }
+  for (const row of pending) {
+    const botId = Number(row.bot_id);
+    try {
+      const childBot = createTelegramApi(decryptManagedBotToken(String(row.encrypted_token)));
+      const identity = await childBot.getMe();
+      if (identity.id !== botId) throw new Error('managed_bot_identity_mismatch');
+      const tenantSql = await createTenantSql(sql, botId);
+      await createNeonRepo(tenantSql).ensureSchema();
+      const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      if (!secret) throw new Error('telegram_webhook_secret_missing');
+      const webhookUrl = new URL('/api/telegram/managed/' + botId + '/webhook', origin).toString();
+      await childBot.setWebhook(webhookUrl, secret);
+      await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${botId} AND owner_telegram_id = ${ownerId}`;
+      await managerBot.sendMessage(ownerId, 'تم تفعيل نسختك @' + (identity.username ?? botId) + ' بنجاح. افتحها وأرسل /start.');
+    } catch (error) {
+      console.error('managed_bot_pending_activation_failed', { botId, ownerId, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+}
 function safeSecretMatch(actual: string | null, expected: string): boolean {
   if (!actual) return false;
   const a = Buffer.from(actual);
@@ -114,11 +152,41 @@ export async function POST(request: Request) {
             status = EXCLUDED.status,
             updated_at = NOW()
         `;
+        if (subscribed) {
+          const childBot = createTelegramApi(childToken);
+          const childIdentity = await childBot.getMe();
+          if (childIdentity.id !== managed.bot.id) throw new Error("managed_bot_identity_mismatch");
+
+          // Provision a private schema in the same Neon database, then attach
+          // the child token to its own Telegram webhook endpoint.
+          const tenantSql = await createTenantSql(sql, managed.bot.id);
+          const tenantRepo = createNeonRepo(tenantSql);
+          await tenantRepo.ensureSchema();
+
+          const appOrigin = process.env.APP_URL
+            ? new URL(process.env.APP_URL).origin
+            : process.env.VERCEL_URL
+              ? "https://" + process.env.VERCEL_URL
+              : new URL(request.url).origin;
+          const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
+          const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+          if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
+          await childBot.setWebhook(webhookUrl, webhookSecret);
+          await sql`
+            UPDATE managed_bots SET status = 'active', updated_at = NOW()
+            WHERE bot_id = ${managed.bot.id}
+          `;
+        }
+
         try {
           await bot.sendMessage(managed.user.id, subscribed
-            ? "✅ تم استلام بوتك الخاص بنجاح. جاري استكمال إعداد قاعدة البيانات المعزولة قبل تفعيله."
-            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ أعد الاشتراك ليتم استكمال التفعيل.");
+            ? "🎉 تم تشغيل نسختك الخاصة بنجاح! افتح البوت وابدأ بـ /start. بيانات مجموعاتك محفوظة في مساحة مستقلة داخل قاعدة Neon."
+            : "⚠️ تم إنشاء البوت، لكن اشتراك قناة Pre Crime غير ظاهر حاليًا؛ اشترك في القناة ثم تواصل مع الدعم لاستكمال التفعيل.");
         } catch { /* the owner may not have opened the manager bot */ }
+      }
+      if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
+        const appOrigin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : new URL(request.url).origin;
+        await activatePendingManagedBots(sql, bot, update.message.from.id, appOrigin);
       }
       const ownerIds = (process.env.BOT_OWNER_IDS ?? "")
         .split(",")
