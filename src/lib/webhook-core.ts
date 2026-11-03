@@ -702,6 +702,38 @@ export function createWebhookHandler(deps: WebhookDeps) {
       return;
     }
 
+    if (section === "create_clone") {
+      if (chat.type !== "private") {
+        await ack(update.id, "إنشاء النسخة متاح من الخاص فقط.", true);
+        return;
+      }
+      try {
+        const membership = await bot.getChatMember(-1004463431688, actorId);
+        if (!["member", "administrator", "creator"].includes(membership.status)) {
+          await bot.sendMessage(chatId, "🔒 إنشاء النسخة الخاصة متاح لمشتركي قناة Pre Crime فقط. اشترك في القناة ثم اضغط الزر مرة أخرى.");
+          await ack(update.id, "يجب الاشتراك في القناة أولًا.", true);
+          return;
+        }
+        const manager = await bot.getMe();
+        if (!manager.can_manage_bots || !manager.username) {
+          await bot.sendMessage(chatId, "⚙️ يلزم تفعيل Bot Management Mode للبوت الأساسي مرة واحدة من إعدادات البوت داخل BotFather Mini App. بعد تفعيله أعد المحاولة.");
+          await ack(update.id, "وضع إدارة البوتات غير مفعّل بعد.", true);
+          return;
+        }
+        const suggestedUsername = `PreCrime${actorId}Bot`;
+        const displayName = encodeURIComponent(`Pre Crime ${update.from.first_name ?? "User"}`);
+        const url = `https://t.me/newbot/${manager.username}/${suggestedUsername}?name=${displayName}`;
+        await bot.sendMessage(chatId, "🚀 اضغط الرابط التالي لإكمال إنشاء نسختك داخل تيليجرام. الاسم واسم المستخدم مقترحان ويمكنك تعديلهما قبل التأكيد:", {
+          reply_markup: { inline_keyboard: [[{ text: "إنشاء البوت الخاص بي", url }]] },
+        });
+        await ack(update.id, "تم تجهيز رابط إنشاء نسختك.");
+      } catch (error) {
+        console.error("managed_bot_creation_precheck_failed", error instanceof Error ? error.message : String(error));
+        await ack(update.id, "تعذر التحقق من اشتراكك الآن. حاول مرة أخرى بعد قليل.", true);
+      }
+      return;
+    }
+
     if (section === "check") {
       if (!gid || !chatIsGroup) {
         await ack(update.id, "فحص الجاهزية متاح من داخل المجموعة.", true);
