@@ -4,6 +4,9 @@ import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
+import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
+import { readJsonBody } from "../../../../lib/http-security";
+import { ensureSingleManagedBotPerOwner, findLiveManagedBot, findLiveManagedBotByBotId, isManagedBotLimitViolation } from "../../../../lib/managed-bot-limit";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../lib/types";
 
@@ -35,6 +38,7 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await ensureSingleManagedBotPerOwner(sql);
 }
 
 async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeof createTelegramApi>, ownerId: number, origin: string): Promise<void> {
@@ -65,7 +69,7 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
       const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
       if (!secret) throw new Error('telegram_webhook_secret_missing');
       const webhookUrl = new URL('/api/telegram/managed/' + botId + '/webhook', origin).toString();
-      await childBot.setWebhook(webhookUrl, secret);
+      await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(secret, botId));
       const webhookInfo = await childBot.getWebhookInfo();
       console.info("managed_bot_activation_webhook_set", {
         botId, webhookUrlMatches: webhookInfo.url === webhookUrl,
@@ -94,12 +98,14 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let update: TelegramUpdate;
-  try {
-    update = (await request.json()) as TelegramUpdate;
-  } catch {
-    return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  const parsedBody = await readJsonBody<TelegramUpdate>(request, 1024 * 1024);
+  if (!parsedBody.ok) {
+    return Response.json(
+      { ok: false, error: parsedBody.status === 413 ? "payload_too_large" : "invalid_json" },
+      { status: parsedBody.status },
+    );
   }
+  const update = parsedBody.value;
 
   if (!Number.isSafeInteger(update.update_id) || update.update_id < 0) {
     return Response.json({ ok: false, error: "invalid_update_id" }, { status: 400 });
@@ -161,6 +167,16 @@ export async function POST(request: Request) {
             throw new Error("managed_bot_encryption_key_missing_or_invalid");
           }
           const managed = update.managed_bot;
+          await ensureManagedBotsSchema(sql);
+          const existingTokenBot = await findLiveManagedBotByBotId(sql, managed.bot.id);
+          if (existingTokenBot) {
+            throw new Error("managed_bot_token_already_in_use");
+          }
+          const existingOwnerBot = await findLiveManagedBot(sql, managed.user.id);
+          if (existingOwnerBot && existingOwnerBot.bot_id !== managed.bot.id) {
+            await bot.sendMessage(managed.user.id, "⛔ مسموح لك بنسخة واحدة فقط. لديك نسخة مسجلة بالفعل؛ لا يمكن تفعيل نسخة ثانية.");
+            throw new Error("owner_already_has_managed_bot");
+          }
           console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_started", botId: managed.bot.id, ownerId: managed.user.id });
           const childToken = await bot.getManagedBotToken(managed.bot.id);
           console.info("managed_bot_provisioning_step", { updateId: update.update_id, step: "token_fetch_completed", botId: managed.bot.id, tokenReceived: Boolean(childToken), tokenLength: childToken.length });
@@ -226,7 +242,7 @@ export async function POST(request: Request) {
             const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
-            await childBot.setWebhook(webhookUrl, webhookSecret);
+            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, managed.bot.id));
             const webhookInfo = await childBot.getWebhookInfo();
             console.info("managed_bot_provisioning_webhook_set", {
               botId: managed.bot.id, webhookUrlMatches: webhookInfo.url === webhookUrl,
@@ -236,7 +252,7 @@ export async function POST(request: Request) {
             });
             await sql`
               UPDATE managed_bots SET status = 'active', updated_at = NOW()
-              WHERE bot_id = ${managed.bot.id}
+              WHERE bot_id = ${managed.bot.id} AND owner_telegram_id = ${managed.user.id}
             `;
             console.info("managed_bot_provisioning_completed", { botId: managed.bot.id, ownerId: managed.user.id });
           }
@@ -248,6 +264,9 @@ export async function POST(request: Request) {
           } catch { /* the owner may not have opened the manager bot */ }
         
         } catch (error) {
+          if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(update.managed_bot.user.id, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
+          const tokenAlreadyInUse = error instanceof Error && error.message === "managed_bot_token_already_in_use";
+          if (tokenAlreadyInUse) { try { await bot.sendMessage(update.managed_bot.user.id, "⛔ فشل التفعيل: توكن هذا البوت مسجل بالفعل في نسخة موجودة أو قيد التفعيل. لم يتم إنشاء نسخة جديدة."); } catch {} }
           console.error("managed_bot_provisioning_failed", {
             updateId: update.update_id,
             stage: "managed_bot_provisioning",
@@ -255,9 +274,11 @@ export async function POST(request: Request) {
             ownerId: update.managed_bot.user.id,
             error: error instanceof Error ? error.message : String(error),
           });
-          try {
-            await bot.sendMessage(update.managed_bot.user.id, "⚠️ تعذر تجهيز النسخة الآن، لكن البوت الأساسي ما زال يعمل. حاول مرة أخرى لاحقًا أو تواصل مع الدعم.");
-          } catch { /* owner may not have opened the primary bot */ }
+          if (!tokenAlreadyInUse) {
+            try {
+              await bot.sendMessage(update.managed_bot.user.id, "⚠️ تعذر تجهيز النسخة الآن، لكن البوت الأساسي ما زال يعمل. حاول مرة أخرى لاحقًا أو تواصل مع الدعم.");
+            } catch { /* owner may not have opened the primary bot */ }
+          }
         }
       }
       if (update.message?.chat.type === 'private' && update.message.from && /^\/start(?:@\w+)?(?:\s|$)/i.test((update.message.text ?? '').trim())) {
@@ -319,6 +340,20 @@ export async function POST(request: Request) {
             const childBot = createTelegramApi(rawToken);
             const identity = await childBot.getMe();
             if (!identity.username) throw new Error("bot_username_unavailable");
+            await ensureManagedBotsSchema(sql);
+            const existingTokenBot = await findLiveManagedBotByBotId(sql, identity.id);
+            if (existingTokenBot) {
+              await repo.clearPending(ownerId);
+              await bot.sendMessage(ownerId, "⛔ فشل التفعيل: توكن هذا البوت مستخدم بالفعل في نسخة مسجلة أو قيد التفعيل. استخدم توكن بوت جديدًا غير مرتبط بأي نسخة.");
+              await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = 'bot_token_already_in_use' WHERE update_id = ${update.update_id}`;
+              return Response.json({ ok: true, processed: true, error: "bot_token_already_in_use" });
+            }
+            const existingOwnerBot = await findLiveManagedBot(sql, ownerId);
+            if (existingOwnerBot && existingOwnerBot.bot_id !== identity.id) {
+              await repo.clearPending(ownerId);
+              await bot.sendMessage(ownerId, "⛔ مسموح لك بنسخة واحدة فقط. لديك نسخة مسجلة بالفعل؛ لا يمكن تفعيل نسخة ثانية.");
+              return Response.json({ ok: true, processed: true, error: "one_managed_bot_limit" });
+            }
             const iv = randomBytes(12);
             const cipher = createCipheriv("aes-256-gcm", Buffer.from(encryptionKey, "hex"), iv);
             const encrypted = Buffer.concat([cipher.update(rawToken, "utf8"), cipher.final()]);
@@ -337,6 +372,7 @@ export async function POST(request: Request) {
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
               )
             `;
+            await ensureSingleManagedBotPerOwner(sql);
             const saved = await sql`
               INSERT INTO managed_bots
                 (bot_id, owner_telegram_id, owner_username, bot_username, bot_display_name, encrypted_token, status)
@@ -362,18 +398,22 @@ export async function POST(request: Request) {
             const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             const webhookUrl = new URL("/api/telegram/managed/" + identity.id + "/webhook", appOrigin).toString();
-            await childBot.setWebhook(webhookUrl, webhookSecret);
+            await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, identity.id));
             const info = await childBot.getWebhookInfo();
             if (info.url !== webhookUrl || info.last_error_message) throw new Error("child_webhook_verification_failed");
             await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id} AND owner_telegram_id = ${ownerId}`;
             await repo.clearPending(ownerId);
             await bot.sendMessage(ownerId, "🎉 تم تفعيل نسختك @" + identity.username + " بنجاح! افتح البوت وأرسل /start.");
           } catch (error) {
+            if (isManagedBotLimitViolation(error)) { try { await bot.sendMessage(ownerId, "⛔ مسموح لك بنسخة واحدة فقط. تم رفض إنشاء النسخة الإضافية."); } catch {} }
+            const tokenAlreadyInUse = error instanceof Error && error.message === "bot_already_registered_to_another_owner";
             console.error("manual_clone_token_provisioning_failed", {
               ownerId, error: error instanceof Error ? error.message : "unknown_error",
             });
             await repo.clearPending(ownerId);
-            await bot.sendMessage(ownerId, "⚠️ لم نتمكن من تفعيل النسخة. تأكد أن التوكن صحيح وأن البوت غير مربوط بحساب آخر، ثم ابدأ من جديد. لم يتم تسجيل التوكن كنص مكشوف.");
+            await bot.sendMessage(ownerId, tokenAlreadyInUse
+              ? "⛔ فشل التفعيل: هذا التوكن مرتبط بالفعل بنسخة أخرى أو بحساب آخر. لم يتم تشغيل نسخة مكررة. استخدم توكن بوت جديدًا."
+              : "⚠️ فشل تفعيل النسخة: تأكد من صحة التوكن وأن البوت غير مربوط بحساب آخر، ثم أعد المحاولة. لم يتم تسجيل التوكن كنص مكشوف.");
           }
           await sql`UPDATE telegram_updates SET status = 'processed', processed_at = NOW(), error_code = NULL WHERE update_id = ${update.update_id}`;
           return Response.json({ ok: true, processed: true });

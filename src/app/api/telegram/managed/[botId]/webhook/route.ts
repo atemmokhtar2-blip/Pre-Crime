@@ -5,6 +5,8 @@ import { createAdminStore } from "../../../../../../lib/admin/store";
 import { createAdminPanel } from "../../../../../../lib/admin/handlers";
 import { ADMIN_PERMISSIONS } from "../../../../../../lib/admin/core";
 import { createTelegramApi } from "../../../../../../lib/telegram-api";
+import { deriveManagedWebhookSecret } from "../../../../../../lib/managed-webhook-secret";
+import { readJsonBody } from "../../../../../../lib/http-security";
 import { createWebhookHandler } from "../../../../../../lib/webhook-core";
 import type { TelegramUpdate } from "../../../../../../lib/types";
 
@@ -62,8 +64,12 @@ export async function POST(
     botId: Number.isSafeInteger(botId) ? botId : rawBotId,
     hasSecretHeader: Boolean(request.headers.get("x-telegram-bot-api-secret-token")),
   });
-  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expectedSecret || !safeSecretMatch(request.headers.get("x-telegram-bot-api-secret-token"), expectedSecret)) {
+  const masterWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token");
+  const expectedSecret = masterWebhookSecret ? deriveManagedWebhookSecret(masterWebhookSecret, botId) : null;
+  const isCurrentSecret = Boolean(expectedSecret && safeSecretMatch(suppliedSecret, expectedSecret));
+  const isLegacySecret = Boolean(masterWebhookSecret && safeSecretMatch(suppliedSecret, masterWebhookSecret));
+  if (!expectedSecret || (!isCurrentSecret && !isLegacySecret)) {
     console.error("managed_bot_webhook_auth_failed", { botId, expectedSecretConfigured: Boolean(expectedSecret) });
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -71,12 +77,14 @@ export async function POST(
     return Response.json({ ok: false, error: "invalid_bot_id" }, { status: 400 });
   }
 
-  let update: TelegramUpdate;
-  try {
-    update = (await request.json()) as TelegramUpdate;
-  } catch {
-    return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  const parsedBody = await readJsonBody<TelegramUpdate>(request, 1024 * 1024);
+  if (!parsedBody.ok) {
+    return Response.json(
+      { ok: false, error: parsedBody.status === 413 ? "payload_too_large" : "invalid_json" },
+      { status: parsedBody.status },
+    );
   }
+  const update = parsedBody.value;
   if (!Number.isSafeInteger(update.update_id) || update.update_id < 0) {
     return Response.json({ ok: false, error: "invalid_update_id" }, { status: 400 });
   }
@@ -108,6 +116,17 @@ export async function POST(
     if (identity.id !== botId) {
       console.error("managed_bot_identity_mismatch", { botId, actualBotId: identity.id });
       return Response.json({ ok: false, error: "managed_bot_identity_mismatch" }, { status: 403 });
+    }
+
+    // One-time, self-service migration for bots that still have the legacy
+    // shared webhook secret. Do not process the triggering payload: ask
+    // Telegram to retry it after the per-bot secret has taken effect.
+    if (isLegacySecret && !isCurrentSecret && masterWebhookSecret) {
+      const rotatedSecret = deriveManagedWebhookSecret(masterWebhookSecret, botId);
+      const webhookUrl = new URL("/api/telegram/managed/" + botId + "/webhook", request.url).toString();
+      await bot.setWebhook(webhookUrl, rotatedSecret);
+      console.warn("managed_bot_legacy_webhook_secret_rotated", { botId });
+      return Response.json({ ok: false, error: "webhook_secret_rotated_retry_delivery" }, { status: 503 });
     }
 
     stage = "tenant_schema";
