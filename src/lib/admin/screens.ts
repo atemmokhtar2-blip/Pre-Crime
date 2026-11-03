@@ -785,6 +785,13 @@ export function screenManagedBotList(bots: ManagedBotAdminRow[]): Screen {
     text: `${b.status === "active" && !b.admin_suspended ? "🟢" : b.status === "deleting" ? "🗑️" : "⏸️"} ${b.bot_username ? "@" + b.bot_username : b.bot_display_name || b.bot_id} · ${b.owner_username ? "@" + b.owner_username : b.owner_telegram_id}`,
     callback_data: ac("mb_view", b.bot_id),
   }]);
+  if (pageCount > 1) {
+    const nav: InlineKeyboardButton[] = [];
+    if (currentPage > 0) nav.push(btn("⬅️ السابق", "mb_page", currentPage - 1));
+    nav.push({ text: `${currentPage + 1}/${pageCount}`, callback_data: ac("noop") });
+    if (currentPage + 1 < pageCount) nav.push(btn("التالي ➡️", "mb_page", currentPage + 1));
+    keyboard.push(nav);
+  }
   keyboard.push([refresh("managed_bots"), back("home")]);
   return {
     text: [
@@ -795,7 +802,7 @@ export function screenManagedBotList(bots: ManagedBotAdminRow[]): Screen {
       `الموقوفة: ${bots.filter((b) => b.admin_suspended || b.status === "suspended_subscription").length}`,
       `قيد الحذف: ${bots.filter((b) => b.status === "deleting").length}`,
       "",
-      bots.length ? "اختر نسخة لعرض تفاصيلها وإدارتها:" : "لا توجد نسخ مسجلة حاليًا.",
+      bots.length ? `الصفحة ${currentPage + 1} من ${pageCount} — اختر نسخة لإدارتها:` : "لا توجد نسخ مسجلة حاليًا.",
     ].join("\n"),
     keyboard,
   };
@@ -842,6 +849,7 @@ export function screenManagedBotDeleteConfirm(b: ManagedBotAdminRow): Screen {
       "",
       "سيتم إلغاء Webhook، ثم حذف سجل النسخة ومخطط قاعدة البيانات الخاص بها بكل الجداول والمستخدمين والمجموعات والإعدادات والسجلات.",
       "⚠️ لا يمكن التراجع عن هذا الإجراء.",
+      "ملاحظة: الحذف يزيل ربط النسخة وبياناتها من النظام ويوقف Webhook. لإبطال توكن Telegram نفسه نهائيًا، استخدم /revoke في BotFather بعد الحذف."
     ].join("\n"),
     keyboard: [
       [btn("🗑️ نعم، احذف كل البيانات نهائيًا", "mb_del_c", b.bot_id)],
