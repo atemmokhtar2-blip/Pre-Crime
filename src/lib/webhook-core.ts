@@ -1402,13 +1402,30 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
   return {
     async handleUpdate(update: TelegramUpdate): Promise<WebhookResult> {
+      // The global admin gate runs before any user-facing handler. It keeps
+      // banned/disabled bot users out and applies maintenance mode without
+      // interrupting group moderation.
+      if (admin) {
+        if (await admin.gate(update)) return { ok: true, processed: true };
+        const actor = update.message?.from ?? update.edited_message?.from ?? update.callback_query?.from ?? update.my_chat_member?.from ?? update.chat_member?.from ?? update.chat_join_request?.from;
+        if (actor) {
+          try { await admin.track(actor); } catch { /* non-critical */ }
+        }
+      }
+
       if (update.message) {
         const text = (update.message.text ?? "").trim();
+        if (update.message.chat.type === "private" && admin && await admin.handleCommand(update.message)) {
+          return { ok: true, processed: true };
+        }
         if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text)) {
           await handleStart(update.message);
           return { ok: true, processed: true };
         }
         if (update.message.chat.type === "private") {
+          if (text && admin && await admin.handlePending(update.message.chat.id, text, update.message.from)) {
+            return { ok: true, processed: true };
+          }
           if (text && (await handlePendingReply(update.message.chat.id, text, update.message.from))) {
             return { ok: true, processed: true };
           }
@@ -1427,6 +1444,9 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
 
       if (update.callback_query) {
+        if (admin && await admin.handleCallback(update.callback_query)) {
+          return { ok: true, processed: true };
+        }
         await handleCallback(update.callback_query);
         return { ok: true, processed: true };
       }
