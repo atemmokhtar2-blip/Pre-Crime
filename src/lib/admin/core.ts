@@ -199,7 +199,16 @@ export function fmtAgo(iso: string | null | undefined, nowMs = Date.now()): stri
 }
 
 export function trunc(value: string, max: number): string {
-  return value.length <= max ? value : value.slice(0, max - 1) + "…";
+  // Telegram requires every inline-keyboard button label to be valid UTF-8.
+  // String.slice() counts UTF-16 code units and can split an emoji/supplementary
+  // character into an unpaired surrogate, which Telegram rejects as an invalid
+  // button-text encoding. Work on Unicode code points and replace any malformed
+  // lone surrogate that may already exist in stored user/group labels.
+  const chars = Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return character.length === 1 && code >= 0xd800 && code <= 0xdfff ? "\\uFFFD" : character;
+  });
+  return chars.length <= max ? chars.join("") : chars.slice(0, Math.max(0, max - 1)).join("") + "…";
 }
 
 export function esc(value: string): string {
