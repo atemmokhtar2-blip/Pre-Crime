@@ -193,7 +193,7 @@ export function createAdminStore(sql: Sql) {
       const q = query ? `%${query}%` : null;
       let rows: Record<string, unknown>[];
       if (q) {
-        const asId = /^-?\\d+$/.test(query!.trim()) ? Number(query!.trim()) : null;
+        const asId = /^-?\d+$/.test(query!.trim()) ? Number(query!.trim()) : null;
         if (asId != null) {
           rows = await sql`SELECT * FROM groups WHERE chat_id = ${asId} ORDER BY added_at DESC, chat_id DESC LIMIT 1`;
         } else {
