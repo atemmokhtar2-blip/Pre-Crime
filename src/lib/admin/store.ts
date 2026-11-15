@@ -144,15 +144,15 @@ export function createAdminStore(sql: Sql) {
         rows = await sql`
           SELECT * FROM bot_users
           WHERE display_name ILIKE ${q} OR username ILIKE ${q} OR CAST(telegram_user_id AS TEXT) LIKE ${q}
-          ORDER BY last_seen_at DESC `;
+          ORDER BY last_seen_at DESC, telegram_user_id DESC `;
       } else if (filter === "active") {
-        rows = await sql`SELECT * FROM bot_users WHERE status = 'active' ORDER BY last_seen_at DESC `;
+        rows = await sql`SELECT * FROM bot_users WHERE status = 'active' ORDER BY last_seen_at DESC, telegram_user_id DESC `;
       } else if (filter === "banned") {
-        rows = await sql`SELECT * FROM bot_users WHERE status IN ('banned','disabled') ORDER BY last_seen_at DESC `;
+        rows = await sql`SELECT * FROM bot_users WHERE status IN ('banned','disabled') ORDER BY last_seen_at DESC, telegram_user_id DESC `;
       } else if (filter === "new") {
-        rows = await sql`SELECT * FROM bot_users WHERE first_seen_at >= NOW() - INTERVAL '7 days' ORDER BY first_seen_at DESC `;
+        rows = await sql`SELECT * FROM bot_users WHERE first_seen_at >= NOW() - INTERVAL '7 days' ORDER BY first_seen_at DESC, telegram_user_id DESC `;
       } else {
-        rows = await sql`SELECT * FROM bot_users ORDER BY last_seen_at DESC `;
+        rows = await sql`SELECT * FROM bot_users ORDER BY last_seen_at DESC, telegram_user_id DESC `;
       }
       return rows.map(mapUser);
     },
