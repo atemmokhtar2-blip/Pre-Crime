@@ -206,7 +206,7 @@ export function trunc(value: string, max: number): string {
   // lone surrogate that may already exist in stored user/group labels.
   const chars = Array.from(value, (character) => {
     const code = character.charCodeAt(0);
-    return character.length === 1 && code >= 0xd800 && code <= 0xdfff ? "\\uFFFD" : character;
+    return character.length === 1 && code >= 0xd800 && code <= 0xdfff ? "\uFFFD" : character;
   });
   return chars.length <= max ? chars.join("") : chars.slice(0, Math.max(0, max - 1)).join("") + "…";
 }
