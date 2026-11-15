@@ -193,29 +193,29 @@ export function createAdminStore(sql: Sql) {
       const q = query ? `%${query}%` : null;
       let rows: Record<string, unknown>[];
       if (q) {
-        const asId = /^-?\d+$/.test(query!.trim()) ? Number(query!.trim()) : null;
+        const asId = /^-?\\d+$/.test(query!.trim()) ? Number(query!.trim()) : null;
         if (asId != null) {
-          rows = await sql`SELECT * FROM groups WHERE chat_id = ${asId} ORDER BY added_at DESC LIMIT 50`;
+          rows = await sql`SELECT * FROM groups WHERE chat_id = ${asId} ORDER BY added_at DESC, chat_id DESC LIMIT 1`;
         } else {
-          rows = await sql`SELECT * FROM groups WHERE title ILIKE ${q} OR username ILIKE ${q} ORDER BY added_at DESC LIMIT 200`;
+          rows = await sql`SELECT * FROM groups WHERE title ILIKE ${q} OR username ILIKE ${q} ORDER BY added_at DESC, chat_id DESC`;
         }
       } else if (filter === "new") {
-        rows = await sql`SELECT * FROM groups WHERE added_at >= NOW() - INTERVAL '7 days' ORDER BY added_at DESC LIMIT 200`;
+        rows = await sql`SELECT * FROM groups WHERE added_at >= NOW() - INTERVAL '7 days' ORDER BY added_at DESC, chat_id DESC`;
       } else if (filter === "active" || filter === "paused" || filter === "left") {
-        rows = await sql`SELECT * FROM groups WHERE status = ${filter} ORDER BY added_at DESC LIMIT 200`;
+        rows = await sql`SELECT * FROM groups WHERE status = ${filter} ORDER BY added_at DESC, chat_id DESC`;
       } else if (filter === "top") {
         rows = await sql`
           SELECT g.*, COALESCE(SUM(m.message_count),0) AS msgs
           FROM groups g LEFT JOIN group_members m ON m.chat_id = g.chat_id
-          GROUP BY g.chat_id ORDER BY msgs DESC LIMIT 200`;
+          GROUP BY g.chat_id ORDER BY msgs DESC, g.added_at DESC, g.chat_id DESC`;
       } else if (filter === "problems") {
         rows = await sql`
           SELECT g.*, COUNT(a.id) AS violations
           FROM groups g JOIN audit_events a ON a.chat_id = g.chat_id AND a.event_type = 'violation'
             AND a.created_at >= NOW() - INTERVAL '7 days'
-          GROUP BY g.chat_id ORDER BY violations DESC LIMIT 200`;
+          GROUP BY g.chat_id ORDER BY violations DESC, g.added_at DESC, g.chat_id DESC`;
       } else {
-        rows = await sql`SELECT * FROM groups ORDER BY added_at DESC LIMIT 200`;
+        rows = await sql`SELECT * FROM groups ORDER BY added_at DESC, chat_id DESC`;
       }
       return rows.map((r) => ({
         chat_id: Number(r.chat_id),
