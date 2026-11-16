@@ -131,13 +131,15 @@ export function screenUserDetail(d: UserDetailData): Screen {
   };
 }
 
-export function screenUserGroups(user: BotUserRow, groups: GroupItem[]): Screen {
-  const keyboard: InlineKeyboardButton[][] = groups.slice(0, 10).map((g) => [
+export function screenUserGroups(user: BotUserRow, groups: GroupItem[], page: number): Screen {
+  const p = paginate(groups, page);
+  const keyboard: InlineKeyboardButton[][] = p.items.map((g) => [
     { text: `🛡️ ${trunc(g.title, 24)}`, callback_data: ac("g_view", g.chat_id) },
   ]);
+  if (p.pages > 1) keyboard.push(pagerRow("u_gpage", p.page, p.pages, user.telegram_user_id));
   keyboard.push([back("u_view", user.telegram_user_id)]);
   return {
-    text: `🛡️ مجموعات ${esc(userLabel(user))} (${groups.length})\n━━━━━━━━━━━━━━━\n${groups.length ? "المجموعات التي يمتلكها أو يتواجد بها:" : "لا توجد مجموعات مسجلة."}`,
+    text: `🛡️ مجموعات ${esc(userLabel(user))} (${p.total})\n━━━━━━━━━━━━━━━\n${p.total ? "المجموعات التي يمتلكها:" : "لا توجد مجموعات مسجلة."}`,
     keyboard,
   };
 }
