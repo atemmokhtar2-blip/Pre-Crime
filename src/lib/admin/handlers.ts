@@ -401,7 +401,16 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         const filter = key === "u_list" ? args[0] ?? "all" : args[1] ?? "all";
         const page = key === "u_list" ? numArg(1) ?? 0 : numArg(0) ?? 0;
         await ack(update.id);
-        await showScreen(screenUserList(await store.listUsers(filter), filter, page));
+        let searchQuery: string | undefined;
+        if (filter === "search") {
+          const searchState = await repo.getPending(chatId);
+          if (searchState?.action !== "search_context_user" || typeof searchState.context.query !== "string") {
+            await showScreen(screenInfo("🔎 نتائج البحث", "انتهت جلسة البحث. ابدأ بحثًا جديدًا.", "users"));
+            return true;
+          }
+          searchQuery = searchState.context.query;
+        }
+        await showScreen(screenUserList(await store.listUsers(filter, searchQuery), filter, page));
         return true;
       }
       case "u_search":
@@ -424,13 +433,15 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         await showScreen(screenUserDetail({ user, ownedGroups: counts.owned, botGroups: counts.botAdded, messageCount: messages, opsCount: ops + opsOnUser - ops }));
         return true;
       }
-      case "u_groups": {
-        const id = numArg(0);
+      case "u_groups":
+      case "u_gpage": {
+        const id = key === "u_groups" ? numArg(0) : numArg(1);
+        const page = key === "u_groups" ? numArg(1) ?? 0 : numArg(0) ?? 0;
         if (id == null) { await ack(update.id, "مستخدم غير معروف.", true); return true; }
         await ack(update.id);
         const user = await store.getUser(id);
         const owned = (await store.listGroups("all")).filter((g) => g.owner_user_id === id);
-        await showScreen(screenUserGroups(user ?? { telegram_user_id: id, username: null, display_name: String(id), status: "active", note: "", first_seen_at: "", last_seen_at: "" }, owned));
+        await showScreen(screenUserGroups(user ?? { telegram_user_id: id, username: null, display_name: String(id), status: "active", note: "", first_seen_at: "", last_seen_at: "" }, owned, page));
         return true;
       }
       case "u_gstats": {
@@ -519,7 +530,16 @@ export function createAdminPanel(deps: AdminPanelDeps) {
         const filter = key === "g_list" ? args[0] ?? "all" : args[1] ?? "all";
         const page = key === "g_list" ? numArg(1) ?? 0 : numArg(0) ?? 0;
         await ack(update.id);
-        await showScreen(screenGroupList(await store.listGroups(filter), filter, page));
+        let searchQuery: string | undefined;
+        if (filter === "search") {
+          const searchState = await repo.getPending(chatId);
+          if (searchState?.action !== "search_context_group" || typeof searchState.context.query !== "string") {
+            await showScreen(screenInfo("🔎 نتائج البحث", "انتهت جلسة البحث. ابدأ بحثًا جديدًا.", "groups"));
+            return true;
+          }
+          searchQuery = searchState.context.query;
+        }
+        await showScreen(screenGroupList(await store.listGroups(filter, searchQuery), filter, page));
         return true;
       }
       case "g_search":
@@ -1536,6 +1556,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       case "adm_search_user": {
         await repo.clearPending(chatId);
         const users = await store.listUsers("search", input);
+        await repo.setPending({ chat_id: chatId, group_id: 0, action: "search_context_user", context: { query: input } });
         const panelMessageId = Number(ctx.panelMessageId);
         await show(chatId, Number.isSafeInteger(panelMessageId) ? panelMessageId : null, screenUserList(users, "search", 0));
         return true;
@@ -1543,6 +1564,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       case "adm_search_group": {
         await repo.clearPending(chatId);
         const groups = await store.listGroups("search", input);
+        await repo.setPending({ chat_id: chatId, group_id: 0, action: "search_context_group", context: { query: input } });
         await show(chatId, null, screenGroupList(groups, "search", 0));
         return true;
       }

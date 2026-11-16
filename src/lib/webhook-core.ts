@@ -1306,6 +1306,8 @@ export function createWebhookHandler(deps: WebhookDeps) {
   async function handlePendingReply(chatId: number, text: string, from?: TelegramFrom): Promise<boolean> {
     const pending = await repo.getPending(chatId);
     if (!pending) return false;
+    // Search context is only for paginating admin results; it is not a reply prompt.
+    if (pending.action === "search_context_user" || pending.action === "search_context_group") return false;
     const gid = pending.group_id;
     if (pending.action === "bot_removed_reason") {
       const reason = text.trim();
