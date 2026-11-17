@@ -2,6 +2,7 @@ import { createCipheriv, createHmac, timingSafeEqual, randomBytes } from "node:c
 import { neon } from "@neondatabase/serverless";
 import { createTelegramApi } from "@/lib/telegram-api";
 import { deriveManagedWebhookSecret } from "@/lib/managed-webhook-secret";
+import type { Sql } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ function authenticate(timestamp: string, signature: string, path: string, body: 
   return safeEqualHex(signature, expected);
 }
 
-async function ensureFactorySchema(sql: ReturnType<typeof neon>) {
+async function ensureFactorySchema(sql: Sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS managed_bots (
       bot_id BIGINT PRIMARY KEY,
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const sql = neon(databaseUrl);
+    const sql = neon(databaseUrl) as unknown as Sql;
     await ensureFactorySchema(sql);
 
     const prior = await sql`SELECT bot_id, owner_telegram_id, status FROM managed_bots WHERE request_id = ${payload.request_id} LIMIT 1`;
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
     const encrypted = encryptToken(payload.bot_token);
     if (prior.length) {
       await sql`
-        UPDATE managed_bots SET encrypted_token = ${encrypted}, status = 'pending_isolation',
+        UPDATE managed_bots SET bot_id = ${identity.id}, encrypted_token = ${encrypted}, status = 'pending_isolation',
           owner_telegram_id = ${payload.owner_telegram_id}, owner_username = ${null},
           admin_suspended = FALSE, updated_at = NOW()
         WHERE request_id = ${payload.request_id}
