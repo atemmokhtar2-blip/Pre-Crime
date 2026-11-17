@@ -64,7 +64,7 @@ export async function POST(
     botId: Number.isSafeInteger(botId) ? botId : rawBotId,
     hasSecretHeader: Boolean(request.headers.get("x-telegram-bot-api-secret-token")),
   });
-  const masterWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const masterWebhookSecret = (process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET);
   const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token");
   const expectedSecret = masterWebhookSecret ? deriveManagedWebhookSecret(masterWebhookSecret, botId) : null;
   const isCurrentSecret = Boolean(expectedSecret && safeSecretMatch(suppliedSecret, expectedSecret));
