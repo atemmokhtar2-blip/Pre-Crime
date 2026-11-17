@@ -63,6 +63,7 @@ async function ensureFactorySchema(sql: Sql) {
 
 export async function POST(request: Request) {
   const raw = await request.text();
+  if (raw.length > 8192) return Response.json({ ok: false, error: "payload_too_large" }, { status: 413 });
   const path = new URL(request.url).pathname;
   const timestamp = request.headers.get("x-factory-timestamp") ?? "";
   const signature = request.headers.get("x-factory-signature") ?? "";
@@ -99,6 +100,9 @@ export async function POST(request: Request) {
     await ensureFactorySchema(sql);
 
     const prior = await sql`SELECT bot_id, owner_telegram_id, status FROM managed_bots WHERE request_id = ${payload.request_id} LIMIT 1`;
+    if (prior.length && Number(prior[0].owner_telegram_id) !== payload.owner_telegram_id) {
+      return Response.json({ ok: false, error: "request_owner_mismatch" }, { status: 409 });
+    }
     if (prior.length && prior[0].status === "active") {
       return Response.json({
         request_id: payload.request_id, instance_id: String(prior[0].bot_id),
