@@ -52,7 +52,7 @@ test("bounded text reader accepts valid UTF-8 without changing the signed body",
 
 test("bounded text reader enforces the byte limit for multibyte UTF-8", async () => {
   const request = new Request("https://example.test/factory", { method: "POST", body: "🪞🪞" });
-  assert.deepEqual(await readTextBody(request, 8), { ok: false, status: 413 });
+  assert.deepEqual(await readTextBody(request, 7), { ok: false, status: 413 });
 });
 
 test("bounded text reader rejects oversized declared and streamed bodies", async () => {
