@@ -14,7 +14,7 @@ export async function readTextBody(request: Request, maxBytes = 1024 * 1024): Pr
 
   const declaredLength = request.headers.get("content-length");
   if (declaredLength !== null) {
-    if (!/^\\d+$/.test(declaredLength)) return { ok: false, status: 400 };
+    if (!/^[0-9]+$/.test(declaredLength)) return { ok: false, status: 400 };
     if (Number(declaredLength) > maxBytes) return { ok: false, status: 413 };
   }
 
@@ -55,7 +55,7 @@ export async function readTextBody(request: Request, maxBytes = 1024 * 1024): Pr
 /** Parse JSON while enforcing a hard byte limit, including chunked requests. */
 export async function readJsonBody<T>(request: Request, maxBytes = 1024 * 1024): Promise<JsonBodyResult<T>> {
   const body = await readTextBody(request, maxBytes);
-  if (!body.ok) return body;
+  if (!body.ok) return { ok: false, status: body.status };
 
   try {
     return { ok: true, value: JSON.parse(body.value) as T };
