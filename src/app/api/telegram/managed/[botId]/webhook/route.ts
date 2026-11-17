@@ -202,7 +202,7 @@ export async function POST(
 
       if (actor && privateChatId != null) {
         stage = "subscription_gate";
-        const managerToken = process.env.TELEGRAM_BOT_TOKEN;
+        const managerToken = process.env.FACTORY_MANAGER_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
         if (!managerToken) throw new Error("primary_bot_token_missing_for_subscription_check");
         const managerBot = createTelegramApi(managerToken);
         const membership = await managerBot.getChatMember("@K_J6k", actor.id);
