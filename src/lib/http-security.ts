@@ -55,7 +55,7 @@ export async function readTextBody(request: Request, maxBytes = 1024 * 1024): Pr
 /** Parse JSON while enforcing a hard byte limit, including chunked requests. */
 export async function readJsonBody<T>(request: Request, maxBytes = 1024 * 1024): Promise<JsonBodyResult<T>> {
   const body = await readTextBody(request, maxBytes);
-  if (!body.ok) return { ok: false, status: body.status };
+  if (body.ok === false) return { ok: false, status: body.status };
 
   try {
     return { ok: true, value: JSON.parse(body.value) as T };
