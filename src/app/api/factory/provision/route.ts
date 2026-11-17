@@ -136,15 +136,20 @@ export async function POST(request: Request) {
 
     const webhookSecret = deriveManagedWebhookSecret(masterWebhookSecret, identity.id);
     const webhookUrl = `https://${vercelUrl}/api/telegram/managed/${identity.id}/webhook`;
-    await createTelegramApi(payload.bot_token).setWebhook(webhookUrl, webhookSecret);
-
+    // Activate the durable row before registering the webhook so the first
+    // Telegram delivery cannot race an inactive-row check.
     await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id}`;
+    await createTelegramApi(payload.bot_token).setWebhook(webhookUrl, webhookSecret);
     console.info("factory_managed_bot_provisioned", { botId: identity.id, ownerId: payload.owner_telegram_id });
     return Response.json({
       request_id: payload.request_id, instance_id: String(identity.id),
       bot_id: identity.id, bot_username: identity.username ?? null, status: "active",
     });
   } catch (error) {
+    try {
+      const sql = neon(databaseUrl) as unknown as Sql;
+      await sql`UPDATE managed_bots SET status = 'failed', updated_at = NOW() WHERE request_id = ${payload.request_id}`;
+    } catch { /* Preserve the original safe failure response. */ }
     console.error("factory_precrime_provision_failed", { errorType: error instanceof Error ? error.name : "unknown" });
     return Response.json({ ok: false, error: "precrime_provision_failed" }, { status: 503 });
   }
