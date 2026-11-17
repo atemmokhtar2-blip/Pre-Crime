@@ -86,7 +86,7 @@ export async function POST(request: Request) {
   }
 
   const databaseUrl = process.env.DATABASE_URL;
-  const masterWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const masterWebhookSecret = (process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET);
   const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
   const vercelUrl = process.env.VERCEL_URL;
   if (!databaseUrl || !masterWebhookSecret || masterWebhookSecret.length < 32 ||
