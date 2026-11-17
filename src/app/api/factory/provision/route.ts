@@ -97,8 +97,10 @@ export async function POST(request: Request) {
   const masterWebhookSecret = (process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET);
   const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
   const vercelUrl = process.env.VERCEL_URL;
+  const webhookBaseUrl = (process.env.MANAGED_BOT_WEBHOOK_BASE_URL ||
+    (vercelUrl ? `https://${vercelUrl}` : "")).replace(/\/+$/, "");
   if (!databaseUrl || !masterWebhookSecret || masterWebhookSecret.length < 32 ||
-      !/^[a-f0-9]{64}$/i.test(encryptionKey) || !vercelUrl) {
+      !/^[a-f0-9]{64}$/i.test(encryptionKey) || !webhookBaseUrl) {
     return Response.json({ ok: false, error: "source_configuration_missing" }, { status: 503 });
   }
 
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
     }
 
     const webhookSecret = deriveManagedWebhookSecret(masterWebhookSecret, identity.id);
-    const webhookUrl = `https://${vercelUrl}/api/telegram/managed/${identity.id}/webhook`;
+    const webhookUrl = `${webhookBaseUrl}/api/telegram/managed/${identity.id}/webhook`;
     // Activate the durable row before registering the webhook so the first
     // Telegram delivery cannot race an inactive-row check.
     await sql`UPDATE managed_bots SET status = 'active', updated_at = NOW() WHERE bot_id = ${identity.id}`;
