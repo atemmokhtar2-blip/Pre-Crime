@@ -1,16 +1,20 @@
+export type TextBodyResult =
+  | { ok: true; value: string }
+  | { ok: false; status: 400 | 413 };
+
 export type JsonBodyResult<T> =
   | { ok: true; value: T }
   | { ok: false; status: 400 | 413 };
 
-/** Parse JSON while enforcing a hard byte limit, including chunked requests. */
-export async function readJsonBody<T>(request: Request, maxBytes = 1024 * 1024): Promise<JsonBodyResult<T>> {
+/** Read UTF-8 request text while enforcing a hard byte limit, including chunked requests. */
+export async function readTextBody(request: Request, maxBytes = 1024 * 1024): Promise<TextBodyResult> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-    throw new Error("invalid_json_body_limit");
+    throw new Error("invalid_request_body_limit");
   }
 
   const declaredLength = request.headers.get("content-length");
   if (declaredLength !== null) {
-    if (!/^\d+$/.test(declaredLength)) return { ok: false, status: 400 };
+    if (!/^\\d+$/.test(declaredLength)) return { ok: false, status: 400 };
     if (Number(declaredLength) > maxBytes) return { ok: false, status: 413 };
   }
 
@@ -42,8 +46,19 @@ export async function readJsonBody<T>(request: Request, maxBytes = 1024 * 1024):
   }
 
   try {
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return { ok: true, value: JSON.parse(text) as T };
+    return { ok: true, value: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+  } catch {
+    return { ok: false, status: 400 };
+  }
+}
+
+/** Parse JSON while enforcing a hard byte limit, including chunked requests. */
+export async function readJsonBody<T>(request: Request, maxBytes = 1024 * 1024): Promise<JsonBodyResult<T>> {
+  const body = await readTextBody(request, maxBytes);
+  if (!body.ok) return body;
+
+  try {
+    return { ok: true, value: JSON.parse(body.value) as T };
   } catch {
     return { ok: false, status: 400 };
   }

@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import { createTelegramApi } from "@/lib/telegram-api";
 import { deriveManagedWebhookSecret } from "@/lib/managed-webhook-secret";
 import type { Sql } from "@/lib/db";
+import { readTextBody } from "@/lib/http-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,8 +63,14 @@ async function ensureFactorySchema(sql: Sql) {
 }
 
 export async function POST(request: Request) {
-  const raw = await request.text();
-  if (raw.length > 8192) return Response.json({ ok: false, error: "payload_too_large" }, { status: 413 });
+  const body = await readTextBody(request, 8192);
+  if (!body.ok) {
+    return Response.json(
+      { ok: false, error: body.status === 413 ? "payload_too_large" : "invalid_request_body" },
+      { status: body.status },
+    );
+  }
+  const raw = body.value;
   const path = new URL(request.url).pathname;
   const timestamp = request.headers.get("x-factory-timestamp") ?? "";
   const signature = request.headers.get("x-factory-signature") ?? "";
