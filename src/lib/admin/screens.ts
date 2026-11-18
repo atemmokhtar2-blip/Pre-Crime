@@ -33,7 +33,7 @@ const btn = (text: string, key: string, ...args: (string | number)[]): InlineKey
 
 // ============ 1. الرئيسية ============
 
-export function screenHome(tenantMode = false, ownerMode = true): Screen {
+export function screenHome(tenantMode = false, ownerMode = true, factoryManaged = false): Screen {
   const keyboard: InlineKeyboardButton[][] = [
     [btn("👥 المستخدمون", "users"), btn("🛡️ المجموعات", "groups")],
     [btn("👑 المديرون", "admins"), btn("🔑 التراخيص", "licenses")],
@@ -48,7 +48,7 @@ export function screenHome(tenantMode = false, ownerMode = true): Screen {
     );
   }
   return {
-    text: tenantMode ? "👑 لوحة إدارة نسختك الخاصة" : "👑 PRE CRIME  /  ADMIN",
+    text: tenantMode ? (factoryManaged ? "👑 لوحة إدارة" : "👑 لوحة إدارة نسختك الخاصة") : "👑 PRE CRIME  /  ADMIN",
     keyboard,
   };
 }

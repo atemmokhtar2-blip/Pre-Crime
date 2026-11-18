@@ -99,7 +99,8 @@ export async function POST(
   try {
     const sql = neon(databaseUrl) as unknown as Sql;
     await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
-    const rows = await sql`SELECT encrypted_token, status, owner_telegram_id, admin_suspended FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
+    await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS request_id UUID`;
+    const rows = await sql`SELECT encrypted_token, status, owner_telegram_id, admin_suspended, request_id FROM managed_bots WHERE bot_id = ${botId} LIMIT 1`;
     const record = rows[0];
     console.info("managed_bot_db_lookup", { botId, found: Boolean(record), status: record?.status ?? null });
     if (!record || record.status !== "active" || record.admin_suspended === true) {
@@ -165,6 +166,7 @@ export async function POST(
       bot,
       ownerIds: [ownerId],
       tenantMode: true,
+      factoryManaged: record.request_id != null,
       webhookUrl: new URL("/api/telegram/managed/" + botId + "/webhook", appOrigin).toString(),
       webhookSecret: expectedSecret,
     });

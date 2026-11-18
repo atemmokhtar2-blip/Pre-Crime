@@ -46,6 +46,7 @@ async function ensureManagedBotsSchema(sql: Sql): Promise<void> {
     await sql`ALTER TABLE managed_bots ADD CONSTRAINT managed_bots_status_check CHECK (status IN ('pending_isolation','active','suspended_subscription','failed','deleting','paused'))`;
   }
   await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS admin_suspended BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE managed_bots ADD COLUMN IF NOT EXISTS request_id UUID`;
   // Migrate instances paused by the previous admin_suspended implementation.
   await sql`UPDATE managed_bots SET status = 'paused', updated_at = NOW() WHERE admin_suspended = TRUE AND status = 'active'`;
   await ensureSingleManagedBotPerOwner(sql);
