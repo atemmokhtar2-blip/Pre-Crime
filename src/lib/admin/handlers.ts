@@ -94,6 +94,7 @@ export interface AdminPanelDeps {
   webhookSecret?: string;
   startedAt?: number;
   tenantMode?: boolean;
+  factoryManaged?: boolean;
 }
 
 // Which panel permission gates each callback-key prefix. "emerg" is owner-only.
@@ -114,6 +115,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function createAdminPanel(deps: AdminPanelDeps) {
   const { store, repo, bot, ownerIds } = deps;
   const tenantMode = deps.tenantMode ?? false;
+  const factoryManaged = deps.factoryManaged ?? false;
   const startedAt = deps.startedAt ?? Date.now();
 
   // ---------- auth ----------
@@ -266,7 +268,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       return true;
     }
     await store.touchAdmin(from.id);
-    await show(message.chat.id, null, screenHome(tenantMode, isOwner(from.id)));
+    await show(message.chat.id, null, screenHome(tenantMode, isOwner(from.id), factoryManaged));
     return true;
   }
 
@@ -388,7 +390,7 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       }
       case "home":
         await ack(update.id);
-        await showScreen(screenHome(tenantMode, isOwner(from.id)));
+        await showScreen(screenHome(tenantMode, isOwner(from.id), factoryManaged));
         return true;
 
       // ============ المستخدمون ============
