@@ -36,6 +36,7 @@ import { shouldDeleteImage } from "./engines/media-engine";
 import { buildGoodbyeMessage, buildWelcomeMessage, memberLabel } from "./messages";
 import { BRAND, DEFAULT_REASON } from "./constants";
 import { applyGlobalProtection } from "./admin/core";
+import { isTelegramMessageNotModifiedError } from "./telegram-errors";
 import type { AdminPanel } from "./admin/handlers";
 import type {
   BotApi,
@@ -157,6 +158,9 @@ export function createWebhookHandler(deps: WebhookDeps) {
         ...(markup ?? {}),
       });
     } catch (error) {
+      // Telegram reports an unchanged edit as an error even though the screen is already correct.
+      // Treat it as an idempotent success instead of falling back and potentially sending a duplicate.
+      if (isTelegramMessageNotModifiedError(error)) return;
       console.error("telegram_rich_edit_fallback", { chatId, messageId, error: error instanceof Error ? error.message : String(error) });
       try {
         await bot.editMessageText(chatId, messageId, screen.text, markup);
