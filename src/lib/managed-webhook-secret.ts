@@ -17,3 +17,33 @@ export function deriveManagedWebhookSecret(masterSecret: string, botId: number):
     .update(String(botId))
     .digest("hex");
 }
+
+/**
+ * Keep compatibility with managed bots provisioned before the dedicated
+ * managed-webhook master secret was introduced. The dedicated key is preferred;
+ * the primary Telegram webhook secret remains an accepted fallback.
+ */
+export function getManagedWebhookMasterSecrets(
+  managedMasterSecret?: string | null,
+  telegramWebhookSecret?: string | null,
+): string[] {
+  return [...new Set(
+    [managedMasterSecret, telegramWebhookSecret].filter(
+      (secret): secret is string => typeof secret === "string" && secret.length >= 32,
+    ),
+  )];
+}
+
+export function getPreferredManagedWebhookMasterSecret(
+  managedMasterSecret?: string | null,
+  telegramWebhookSecret?: string | null,
+): string | null {
+  return getManagedWebhookMasterSecrets(managedMasterSecret, telegramWebhookSecret)[0] ?? null;
+}
+
+export function deriveManagedWebhookSecretCandidates(
+  botId: number,
+  masterSecrets: readonly string[],
+): string[] {
+  return [...new Set(masterSecrets.map((secret) => deriveManagedWebhookSecret(secret, botId)))];
+}

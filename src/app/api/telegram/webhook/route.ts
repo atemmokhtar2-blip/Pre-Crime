@@ -4,7 +4,7 @@ import { createNeonRepo, createTenantSql, type Sql } from "../../../../lib/db";
 import { createAdminStore } from "../../../../lib/admin/store";
 import { createAdminPanel, type ManagedBotAdminActions } from "../../../../lib/admin/handlers";
 import { createTelegramApi } from "../../../../lib/telegram-api";
-import { deriveManagedWebhookSecret } from "../../../../lib/managed-webhook-secret";
+import { deriveManagedWebhookSecret, getPreferredManagedWebhookMasterSecret } from "../../../../lib/managed-webhook-secret";
 import { readJsonBody } from "../../../../lib/http-security";
 import { ensureSingleManagedBotPerOwner, findLiveManagedBot, findLiveManagedBotByBotId, isManagedBotLimitViolation } from "../../../../lib/managed-bot-limit";
 import { createWebhookHandler } from "../../../../lib/webhook-core";
@@ -77,7 +77,7 @@ async function activatePendingManagedBots(sql: Sql, managerBot: ReturnType<typeo
       if (identity.id !== botId) throw new Error('managed_bot_identity_mismatch');
       const tenantSql = await createTenantSql(sql, botId);
       await createNeonRepo(tenantSql).ensureSchema();
-      const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      const secret = getPreferredManagedWebhookMasterSecret(process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET, process.env.TELEGRAM_WEBHOOK_SECRET);
       if (!secret) throw new Error('telegram_webhook_secret_missing');
       const webhookUrl = new URL('/api/telegram/managed/' + botId + '/webhook', origin).toString();
       await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(secret, botId));
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
                 ? "https://" + process.env.VERCEL_URL
                 : new URL(request.url).origin;
             const webhookUrl = new URL("/api/telegram/managed/" + managed.bot.id + "/webhook", appOrigin).toString();
-            const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+            const webhookSecret = getPreferredManagedWebhookMasterSecret(process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET, process.env.TELEGRAM_WEBHOOK_SECRET);
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, managed.bot.id));
             const webhookInfo = await childBot.getWebhookInfo();
@@ -334,7 +334,7 @@ export async function POST(request: Request) {
           const child = createTelegramApi(decryptManagedBotToken(String(rows[0].encrypted_token)));
           const identity = await child.getMe();
           if (identity.id !== botId) throw new Error("فشل التحقق من هوية البوت.");
-          const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+          const secret = getPreferredManagedWebhookMasterSecret(process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET, process.env.TELEGRAM_WEBHOOK_SECRET);
           if (!secret) throw new Error("إعداد Webhook غير متاح.");
           const origin = process.env.APP_URL ? new URL(process.env.APP_URL).origin : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin;
           const webhookUrl = new URL("/api/telegram/managed/" + botId + "/webhook", origin).toString();
@@ -455,7 +455,7 @@ export async function POST(request: Request) {
             const appOrigin = process.env.APP_URL
               ? new URL(process.env.APP_URL).origin
               : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : new URL(request.url).origin;
-            const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+            const webhookSecret = getPreferredManagedWebhookMasterSecret(process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET, process.env.TELEGRAM_WEBHOOK_SECRET);
             if (!webhookSecret) throw new Error("telegram_webhook_secret_missing");
             const webhookUrl = new URL("/api/telegram/managed/" + identity.id + "/webhook", appOrigin).toString();
             await childBot.setWebhook(webhookUrl, deriveManagedWebhookSecret(webhookSecret, identity.id));

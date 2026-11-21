@@ -1,7 +1,7 @@
 import { createCipheriv, createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { createTelegramApi } from "@/lib/telegram-api";
-import { deriveManagedWebhookSecret } from "@/lib/managed-webhook-secret";
+import { deriveManagedWebhookSecret, getPreferredManagedWebhookMasterSecret } from "@/lib/managed-webhook-secret";
 import type { Sql } from "@/lib/db";
 import { readTextBody } from "@/lib/http-security";
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
   }
 
   const databaseUrl = process.env.DATABASE_URL;
-  const masterWebhookSecret = (process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET ?? process.env.TELEGRAM_WEBHOOK_SECRET);
+  const masterWebhookSecret = getPreferredManagedWebhookMasterSecret(process.env.MANAGED_BOT_WEBHOOK_MASTER_SECRET, process.env.TELEGRAM_WEBHOOK_SECRET);
   const encryptionKey = process.env.MANAGED_BOT_TOKEN_ENCRYPTION_KEY_V2 ?? "";
   const vercelUrl = process.env.VERCEL_URL;
   const webhookBaseUrl = (process.env.MANAGED_BOT_WEBHOOK_BASE_URL ||
