@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { deriveManagedWebhookSecret } = require("../.test-build/managed-webhook-secret.js");
+const { deriveManagedWebhookSecret, deriveManagedWebhookSecretCandidates, getManagedWebhookMasterSecrets, getPreferredManagedWebhookMasterSecret } = require("../.test-build/managed-webhook-secret.js");
 
 test("managed webhook secrets are deterministic for one bot", () => {
   const a = deriveManagedWebhookSecret("x".repeat(48), 123456);
@@ -23,4 +23,32 @@ test("invalid bot IDs and weak master secrets fail closed", () => {
     assert.throws(() => deriveManagedWebhookSecret("x".repeat(48), id));
   }
   assert.throws(() => deriveManagedWebhookSecret("short", 111));
+});
+
+test("dedicated managed webhook master secret is preferred", () => {
+  const managed = "m".repeat(48);
+  const telegram = "t".repeat(48);
+  assert.equal(getPreferredManagedWebhookMasterSecret(managed, telegram), managed);
+});
+
+test("primary Telegram webhook secret remains a fallback for managed bots", () => {
+  const telegram = "t".repeat(48);
+  assert.equal(getPreferredManagedWebhookMasterSecret(null, telegram), telegram);
+  assert.equal(getPreferredManagedWebhookMasterSecret("", telegram), telegram);
+});
+
+test("managed webhook accepts derived secrets from both configured master keys", () => {
+  const managed = "m".repeat(48);
+  const telegram = "t".repeat(48);
+  const secrets = getManagedWebhookMasterSecrets(managed, telegram);
+  const candidates = deriveManagedWebhookSecretCandidates(8513638463, secrets);
+  assert.equal(candidates.length, 2);
+  assert.ok(candidates.includes(deriveManagedWebhookSecret(managed, 8513638463)));
+  assert.ok(candidates.includes(deriveManagedWebhookSecret(telegram, 8513638463)));
+});
+
+test("duplicate and weak managed webhook master secrets are excluded", () => {
+  const shared = "s".repeat(48);
+  assert.deepEqual(getManagedWebhookMasterSecrets(shared, shared), [shared]);
+  assert.deepEqual(getManagedWebhookMasterSecrets("short", null), []);
 });
