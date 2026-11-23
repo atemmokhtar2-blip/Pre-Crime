@@ -12,6 +12,7 @@ import type {
   TelegramUpdate,
 } from "../types";
 import type { AdminStore } from "./store";
+import { shouldFallbackAfterTelegramEditError } from "../telegram-errors";
 import { restoreBackup, runBackup } from "./backup";
 import {
   ADMIN_PERMISSIONS,
@@ -171,8 +172,13 @@ export function createAdminPanel(deps: AdminPanelDeps) {
       try {
         await bot.editMessageText(chatId, messageId, screen.text, markup ? { reply_markup: markup.reply_markup } : undefined);
         return;
-      } catch {
-        // fall through to a fresh message (message may be too old to edit)
+      } catch (error) {
+        // Telegram treats an unchanged edit as an error, but the existing screen is already correct.
+        if (!shouldFallbackAfterTelegramEditError(error)) return;
+        console.warn("admin_screen_edit_fallback", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Genuine edit failures (for example, an expired message) still get a fresh-message fallback.
       }
     }
     await bot.sendMessage(chatId, screen.text, markup);
