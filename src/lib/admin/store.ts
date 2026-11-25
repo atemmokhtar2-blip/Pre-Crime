@@ -27,6 +27,14 @@ function parseJson<T>(value: unknown, fallback: T): T {
   return value as T;
 }
 
+/** Parse Telegram chat IDs without allowing unsafe JS integer rounding. */
+export function parseSafeGroupChatId(query: string): number | null {
+  const normalized = query.trim();
+  if (!/^-?\\d+$/.test(normalized)) return null;
+  const value = Number(normalized);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
 export async function ensureAdminSchema(sql: Sql): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS bot_users (
@@ -193,7 +201,7 @@ export function createAdminStore(sql: Sql) {
       const q = query ? `%${query}%` : null;
       let rows: Record<string, unknown>[];
       if (q) {
-        const asId = /^-?\d+$/.test(query!.trim()) ? Number(query!.trim()) : null;
+        const asId = parseSafeGroupChatId(query ?? "");
         if (asId != null) {
           rows = await sql`SELECT * FROM groups WHERE chat_id = ${asId} ORDER BY added_at DESC, chat_id DESC LIMIT 1`;
         } else {
