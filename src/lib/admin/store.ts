@@ -30,7 +30,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
 /** Parse Telegram chat IDs without allowing unsafe JS integer rounding. */
 export function parseSafeGroupChatId(query: string): number | null {
   const normalized = query.trim();
-  if (!/^-?\\d+$/.test(normalized)) return null;
+  if (!/^-?\d+$/.test(normalized)) return null;
   const value = Number(normalized);
   return Number.isSafeInteger(value) ? value : null;
 }
